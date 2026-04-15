@@ -1,0 +1,27 @@
+services:
+  hermes:
+    image: local-hermes
+    container_name: hermes-agent
+    command: gateway run
+    volumes:
+      - ./.hermes:/opt/data:Z
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+    shm_size: '1gb'
+    environment:
+      - TZ=UTC
+    depends_on:
+      - ollama
+
+  ollama:
+    image: local-ollama
+    container_name: ollama
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
