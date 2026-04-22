@@ -1,6 +1,6 @@
 # Project Setup and Configuration
 
-This document outlines the configuration and setup for the Hermes Agent and Ollama environment.
+This document outlines the configuration and setup for the Hermes Agent and Enterprise Automation environment.
 
 ## Current Environment
 - **Container Engine:** Podman (Rootless)
@@ -12,42 +12,40 @@ To handle image loading and volume permissions in an airgapped, rootless Podman 
 
 ## Custom Images
 
-### Ollama (`local-ollama`)
-- **Source:** `ollama.Dockerfile`
-- **Feature:** Pre-loads `qwen2.5:0.5b` during the build process to ensure availability in airgapped environments.
-- **Base Image:** `docker.io/ollama/ollama:latest`
+### AAP API Server (`aap-server`)
+- **Source:** `mock_aap.Dockerfile`
+- **Feature:** Simulates a production Ansible Automation Platform (AAP) API for testing tool integration.
+- **Base Image:** `docker.io/python:3.11-slim`
 
 ### Hermes Agent (`local-hermes`)
 - **Source:** `hermes.Dockerfile`
-- **Feature:** Pre-configures `config.yaml` with the local Ollama provider and overrides the minimum context window requirement.
+- `config.yaml` is pre-configured with the Ollama Cloud provider.
 - **Base Image:** `docker.io/nousresearch/hermes-agent:latest`
 
 ## Build and Deployment
 
-### 1. Build Custom Images
+### 1. Build and Start Services
+The project uses `podman-compose` for orchestration.
+
 ```bash
-podman build -t local-ollama -f ollama.Dockerfile .
-podman build -t local-hermes -f hermes.Dockerfile .
+podman-compose up -d --force-recreate
 ```
 
-### 2. Service Orchestration
-The `docker-compose.yml` is configured to use these local images and maps `./.hermes` to `/opt/data`.
+### 2. Service Architecture
+The `docker-compose.yml` is configured to run the agent and the AAP server on the same internal network (`agent2_default`).
 
-```yaml
-services:
-  hermes:
-    image: local-hermes
-    # ... (other config)
-  ollama:
-    image: local-ollama
-    # ... (other config)
-```
+## Skills Architecture
+The agent is equipped with native DevOps skills that communicate with the AAP API Server.
 
-## Active Model Configuration
-The agent uses **qwen2.5:0.5b** via the local Ollama instance. The `context_length` is explicitly set to **64000** in `config.yaml` to bypass the agent's internal minimum requirements.
+### DevOps Skills (`devops/`)
+- `ansible_run_command`: Executes shell commands on remote hosts.
+- `ansible_reboot_host`: Reboots remote systems.
+- `ansible_install_package`: Installs system packages.
+- `ansible_expand_fs`: Expands remote filesystems.
+- `ansible_fix_pcs`: Resolves PCS cluster issues.
 
-## Usage
-To access the interactive chat session reliably:
+## Interactive Chat
+To access the interactive session with the latest DevOps toolset:
 ```bash
-podman exec -it -u hermes hermes-agent /opt/hermes/.venv/bin/python /opt/hermes/hermes chat
+podman exec -it -u hermes hermes-agent /opt/hermes/.venv/bin/python /opt/hermes/hermes chat -m "qwen3-coder-next"
 ```

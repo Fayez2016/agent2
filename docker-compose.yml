@@ -14,14 +14,22 @@ services:
     shm_size: '1gb'
     environment:
       - TZ=UTC
+      - AAP_HOST=aap-server:5000
+      - AAP_TOKEN=mock-token
     depends_on:
-      - ollama
+      - aap-server
 
-  ollama:
-    image: local-ollama
-    container_name: ollama
+  aap-server:
+    build:
+      context: .
+      dockerfile: mock_aap.Dockerfile
+    container_name: aap-server
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 8G
+    ports:
+      - "5000:5000"
+    networks:
+      - default
+
+networks:
+  default:
+    name: agent2_default
