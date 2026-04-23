@@ -5,6 +5,8 @@ services:
     command: gateway run
     volumes:
       - ./.hermes:/opt/data:Z
+      - /run/user/1000/podman/podman.sock:/run/user/1000/podman/podman.sock:Z
+      - .:/home/fayez/agent2:Z
     restart: unless-stopped
     deploy:
       resources:
@@ -16,8 +18,10 @@ services:
       - TZ=UTC
       - AAP_HOST=aap-server:5000
       - AAP_TOKEN=mock-token
+      - CONTAINER_HOST=unix:///run/user/1000/podman/podman.sock
     depends_on:
       - aap-server
+      - ansible-mcp
 
   aap-server:
     build:
@@ -27,6 +31,18 @@ services:
     restart: unless-stopped
     ports:
       - "5000:5000"
+    networks:
+      - default
+
+  ansible-mcp:
+    build:
+      context: .
+      dockerfile: ansible_mcp.Dockerfile
+    container_name: ansible-mcp
+    restart: unless-stopped
+    environment:
+      - AAP_HOST=aap-server:5000
+      - AAP_TOKEN=mock-token
     networks:
       - default
 
