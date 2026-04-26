@@ -5,8 +5,7 @@ RUN pip install mcp[fastmcp] requests urllib3
 COPY ansible_mcp_server.py /app/ansible_mcp_server.py
 WORKDIR /app
 
-# The MCP server runs via stdio, but we can also use HTTP if needed later.
-# For now, it will be started by the agent via podman exec or ssh.
-# To host it as a persistent service, we'd use a different transport.
+# The MCP server runs as a persistent HTTP service on port 8000.
+# It is accessed by the agent via the internal network.
 
 CMD ["python", "ansible_mcp_server.py"]

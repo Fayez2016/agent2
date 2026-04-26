@@ -55,7 +55,7 @@ _HERMES_CORE_TOOLS = [
     # Code execution + delegation
     "execute_code", "delegate_task",
     # Cronjob management
-    "cronjob", "ansible_run_command", "ansible_reboot_host", "ansible_install_package",
+    "cronjob",
     # Cross-platform messaging (gated on gateway running via check_fn)
     "send_message",
     # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
@@ -202,9 +202,9 @@ TOOLSETS = {
     },
 
     "devops": {
-        "description": "Ansible AAP automation tools",
-        "tools": ["ansible_run_command", "ansible_reboot_host", "ansible_install_package"],
-        "includes": []
+        "description": "Ansible AAP automation tools (via MCP)",
+        "tools": [],
+        "includes": ["mcp-ansible"]
     },
 
 
@@ -273,7 +273,7 @@ TOOLSETS = {
             # Code execution + delegation
             "execute_code", "delegate_task",
             # Cronjob management
-            "cronjob", "ansible_run_command", "ansible_reboot_host", "ansible_install_package",
+            "cronjob",
             # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
             "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
 

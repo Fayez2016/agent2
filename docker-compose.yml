@@ -40,6 +40,8 @@ services:
       dockerfile: ansible_mcp.Dockerfile
     container_name: ansible-mcp
     restart: unless-stopped
+    ports:
+      - "8000:8000"
     environment:
       - AAP_HOST=aap-server:5000
       - AAP_TOKEN=mock-token
