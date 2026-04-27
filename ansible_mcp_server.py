@@ -21,7 +21,7 @@ logger = logging.getLogger("AnsibleMCP")
 
 mcp = FastMCP(
     "ansible",
-    instructions="Dedicated Ansible Automation Platform (AAP) bridge for enterprise infrastructure management."
+    instructions="Dedicated Ansible Automation Platform (AAP) bridge for enterprise infrastructure management, specifically tuned for RHEL HA Cluster patching."
 )
 
 def extract_debug_msg(stdout: str) -> Optional[str]:
@@ -110,6 +110,45 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any]) -> str
         logger.error(f"Error in Ansible job: {str(e)}")
         return json.dumps({"error": str(e)})
 
+# --- RHEL HA Recommended Practices Tools ---
+
+@mcp.tool()
+def ansible_pcs_node_standby(hostname: str) -> str:
+    """Puts a specific cluster node in STANDBY mode to migrate resources off it."""
+    return run_ansible_job_logic("PCS Node Standby", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_pcs_node_unstandby(hostname: str) -> str:
+    """Takes a specific cluster node out of STANDBY mode."""
+    return run_ansible_job_logic("PCS Node Unstandby", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_pcs_cluster_stop(hostname: str) -> str:
+    """Stops the cluster software (Pacemaker/Corosync) on a specific node."""
+    return run_ansible_job_logic("PCS Cluster Stop", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_pcs_cluster_start(hostname: str) -> str:
+    """Starts the cluster software (Pacemaker/Corosync) on a specific node."""
+    return run_ansible_job_logic("PCS Cluster Start", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_pcs_cluster_disable(hostname: str) -> str:
+    """Disables the cluster services from starting at boot on a specific node."""
+    return run_ansible_job_logic("PCS Cluster Disable", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_pcs_cluster_enable(hostname: str) -> str:
+    """Enables the cluster services to start at boot on a specific node."""
+    return run_ansible_job_logic("PCS Cluster Enable", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_pcs_health_check(hostname: str) -> str:
+    """Retrieves a comprehensive health check for the PCS cluster from a node's perspective."""
+    return run_ansible_job_logic("PCS Health Check", {"hostname": hostname})
+
+# --- Fleet Patching & Existing Tools ---
+
 @mcp.tool()
 def ansible_patch_fleet(hostlist: str) -> str:
     """Apply security patches to a fleet of servers (no reboot)."""
@@ -122,12 +161,12 @@ def ansible_reboot_fleet(hostlist: str) -> str:
 
 @mcp.tool()
 def ansible_pcs_prepatch_check(hostlist: str) -> str:
-    """Perform pre-patch validation for PCS cluster resources across a fleet."""
+    """Perform pre-patch validation across a fleet (Checks quorum and resource status)."""
     return run_ansible_job_logic("PCS Pre-Patch Check", {"hostlist": hostlist})
 
 @mcp.tool()
 def ansible_pcs_postpatch_check(hostlist: str) -> str:
-    """Perform post-patch validation for PCS cluster resources across a fleet."""
+    """Perform post-patch validation across a fleet (Checks resource recovery and health)."""
     return run_ansible_job_logic("PCS Post-Patch Check", {"hostlist": hostlist})
 
 @mcp.tool()

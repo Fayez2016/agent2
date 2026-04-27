@@ -46,7 +46,7 @@ def log_response_info(response):
 # In-memory store for jobs
 jobs = {}
 
-# Template Name to ID mapping
+# Template Name to ID mapping - Updated with RHEL HA Recommended Practices
 TEMPLATE_MAP = {
     "Limited Run Any Command": 101,
     "Reboot Host": 102,
@@ -59,7 +59,15 @@ TEMPLATE_MAP = {
     "PCS Post-Patch Check": 113,
     "VMware VM Reset": 107,
     "PCS Status": 108,
-    "Send Email Notification": 109
+    "Send Email Notification": 109,
+    # New Granular PCS Tools from Recommended Practices
+    "PCS Node Standby": 114,
+    "PCS Node Unstandby": 115,
+    "PCS Cluster Stop": 116,
+    "PCS Cluster Start": 117,
+    "PCS Cluster Disable": 118,
+    "PCS Cluster Enable": 119,
+    "PCS Health Check": 120
 }
 
 @app.route('/api/v2/job_templates', methods=['GET'])
@@ -77,8 +85,8 @@ def launch_job(template_id):
         if data: extra_vars = data.get('extra_vars', {})
     
     status = "successful"
-    # Randomly fail patching or PCS checks to force agent orchestration/troubleshooting
-    if template_id in [110, 112, 113] and random.random() < 0.15:
+    # Logic for failure simulation
+    if template_id in [110, 112, 113, 120] and random.random() < 0.10:
         status = "failed"
     
     jobs[job_id] = {
@@ -109,7 +117,7 @@ def generate_fleet_stdout(template_id, status):
     results = {}
     for server in FLEET_SERVERS:
         rand = random.random()
-        if rand < 0.90 or template_id == 111: # Reboot fleet is very reliable in this sim
+        if rand < 0.95:
             results[server] = "ok"
             output.append(f"ok: [{server}]")
         else:
@@ -152,16 +160,32 @@ def get_job_stdout(job_id):
     if template_id in [110, 111, 112, 113]:
         return generate_fleet_stdout(template_id, job["status"])
     
-    # Existing single-host logic...
-    msg = f"Operation completed on {hostname}"
-    if template_id == 108: msg = "PCS Cluster is Healthy"
+    # Specific Tool Outputs
+    if template_id == 114: # Node Standby
+        msg = f"Node {hostname} put in STANDBY mode. Resources migrating..."
+    elif template_id == 115: # Node Unstandby
+        msg = f"Node {hostname} taken out of STANDBY mode. Resources may rebalance."
+    elif template_id == 116: # Cluster Stop
+        msg = f"Cluster services stopped on {hostname}."
+    elif template_id == 117: # Cluster Start
+        msg = f"Cluster services started on {hostname}."
+    elif template_id == 118: # Cluster Disable
+        msg = f"Cluster services disabled at boot on {hostname}."
+    elif template_id == 119: # Cluster Enable
+        msg = f"Cluster services enabled at boot on {hostname}."
+    elif template_id == 120: # Health Check
+        msg = f"Health Check for {hostname}: PASS. All resources active, quorum attained, no failed actions."
+    elif template_id == 108: # Status
+        msg = f"Cluster Status: Online. Node {hostname} is member. Resources started."
+    else:
+        msg = f"Operation completed on {hostname}"
     
     return f"""
-PLAY [Job] *********************************************************************
-TASK [Action] ******************************************************************
-ok: [{hostname}] => {{"msg": "{msg}"}}
+PLAY [HA Cluster Management] ***************************************************
+TASK [Execute Action] **********************************************************
+ok: [{hostname}] => {{"msg": "{msg}", "changed": true}}
 PLAY RECAP *********************************************************************
-{hostname:30} : ok=2    changed=0    unreachable=0    failed=0
+{hostname:30} : ok=2    changed=1    unreachable=0    failed=0
 """
 
 if __name__ == '__main__':
