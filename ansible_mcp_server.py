@@ -111,6 +111,26 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any]) -> str
         return json.dumps({"error": str(e)})
 
 @mcp.tool()
+def ansible_patch_fleet(hostlist: str) -> str:
+    """Apply security patches to a fleet of servers (no reboot)."""
+    return run_ansible_job_logic("Patch Fleet", {"hostlist": hostlist})
+
+@mcp.tool()
+def ansible_reboot_fleet(hostlist: str) -> str:
+    """Reboot a fleet of servers."""
+    return run_ansible_job_logic("Reboot Fleet", {"hostlist": hostlist})
+
+@mcp.tool()
+def ansible_pcs_prepatch_check(hostlist: str) -> str:
+    """Perform pre-patch validation for PCS cluster resources across a fleet."""
+    return run_ansible_job_logic("PCS Pre-Patch Check", {"hostlist": hostlist})
+
+@mcp.tool()
+def ansible_pcs_postpatch_check(hostlist: str) -> str:
+    """Perform post-patch validation for PCS cluster resources across a fleet."""
+    return run_ansible_job_logic("PCS Post-Patch Check", {"hostlist": hostlist})
+
+@mcp.tool()
 def ansible_run_command(command: str, hostname: str) -> str:
     """Executes a shell command on a remote host via Ansible AAP."""
     return run_ansible_job_logic("Limited Run Any Command", {
@@ -144,11 +164,6 @@ def ansible_expand_fs(hostname: str, mount_point: str, size_gb: int) -> str:
 def ansible_fix_pcs(hostname: str) -> str:
     """Fixes PCS cluster issues on a remote host via Ansible AAP."""
     return run_ansible_job_logic("Fix PCS Cluster", {"hostname": hostname})
-
-@mcp.tool()
-def ansible_patch_fleet(hostlist: str) -> str:
-    """Apply security patches and reboot a fleet of servers via Ansible AAP."""
-    return run_ansible_job_logic("Patching and Reboot", {"hostlist": hostlist})
 
 @mcp.tool()
 def ansible_vmware_reset(hostname: str) -> str:
