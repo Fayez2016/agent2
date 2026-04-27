@@ -21,7 +21,7 @@ logger = logging.getLogger("AnsibleMCP")
 
 mcp = FastMCP(
     "ansible",
-    instructions="Dedicated Ansible Automation Platform (AAP) bridge for remote host management."
+    instructions="Dedicated Ansible Automation Platform (AAP) bridge for enterprise infrastructure management."
 )
 
 def extract_debug_msg(stdout: str) -> Optional[str]:
@@ -78,13 +78,7 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any]) -> str
     aap_token = os.getenv("AAP_TOKEN")
 
     if not aap_host or not aap_token:
-        hostname = extra_vars.get("hostname") or extra_vars.get("hostlist") or "test-host"
-        logger.info(f"AAP not configured. Returning local execution result for {template_name} on {hostname}")
-        return json.dumps({
-            "status": "successful",
-            "output": f"Result: Action '{template_name}' completed on {hostname}\n\nFull Output:\nAAP execution completed successfully.",
-            "job_id": 0
-        })
+        return json.dumps({"error": "AAP_HOST or AAP_TOKEN not configured"})
 
     headers = {
         "Authorization": f"Bearer {aap_token}",
@@ -151,8 +145,31 @@ def ansible_fix_pcs(hostname: str) -> str:
     """Fixes PCS cluster issues on a remote host via Ansible AAP."""
     return run_ansible_job_logic("Fix PCS Cluster", {"hostname": hostname})
 
+@mcp.tool()
+def ansible_patch_fleet(hostlist: str) -> str:
+    """Apply security patches and reboot a fleet of servers via Ansible AAP."""
+    return run_ansible_job_logic("Patching and Reboot", {"hostlist": hostlist})
+
+@mcp.tool()
+def ansible_vmware_reset(hostname: str) -> str:
+    """Performs a hard reset on a VM via VMware vCenter (triggered via AAP)."""
+    return run_ansible_job_logic("VMware VM Reset", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_pcs_status(hostname: str) -> str:
+    """Retrieves the status of a PCS cluster on a specific host via AAP."""
+    return run_ansible_job_logic("PCS Status", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_send_email(hostname: str, email_to: str, message: str) -> str:
+    """Sends a notification email regarding a specific host via AAP."""
+    return run_ansible_job_logic("Send Email Notification", {
+        "hostname": hostname,
+        "email_to": email_to,
+        "email_body": message
+    })
+
 if __name__ == "__main__":
-    # The MCP server runs as a persistent service
     mcp.settings.host = "0.0.0.0"
     mcp.settings.port = 8000
     mcp.settings.transport_security.allowed_hosts.extend(["*", "ansible-mcp:8000", "ansible-mcp"])
