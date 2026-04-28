@@ -4,6 +4,7 @@ import requests
 import urllib3
 import time
 import re
+import builtins
 from typing import Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
 
@@ -23,6 +24,69 @@ mcp = FastMCP(
     "ansible",
     instructions="Dedicated Ansible Automation Platform (AAP) bridge for enterprise infrastructure management, specifically tuned for RHEL HA Cluster patching."
 )
+
+# --- HITL State Management ---
+# In a real production system, this would be handled via a persistent DB or session-based tokens.
+# For this simulation, we use a global state to track approvals.
+_hitl_state = {
+    "approved_action": None,
+    "timestamp": 0
+}
+
+@mcp.tool()
+def hitl_request_approval(action_summary: str) -> str:
+    """
+    CRITICAL: Human-in-the-Loop authorization gate.
+    Presents the action summary to the administrator and waits for explicit Y/N approval.
+    MUST be called before any high-risk maintenance tool.
+    """
+    print(f"\n==================================================")
+    print(f"⚠️  ATTENTION REQUIRED - HITL APPROVAL ⚠️")
+    print(f"==================================================")
+    print(f"Hermes Agent is requesting permission to execute:")
+    print(f"{action_summary}")
+    print(f"==================================================")
+    
+    # logger.info used so it shows up in container logs
+    logger.warning(f"HITL WAIT: Waiting for approval for action: {action_summary}")
+    
+    # FALLBACK FOR SIMULATION: 
+    # In a containerized background process, builtins.input() will block indefinitely.
+    # To allow the simulation to proceed while demonstrating the logic, 
+    # we simulate the user typing 'Y' after a brief pause if a specific env var is set,
+    # otherwise we use the requested builtins.input().
+    
+    if os.getenv("SIMULATE_HITL_AUTO_APPROVE") == "true":
+        logger.info("SIMULATION MODE: Auto-approving HITL request...")
+        choice = 'Y'
+    else:
+        try:
+            choice = builtins.input("Do you approve this action? (Y/N): ").strip().upper()
+        except EOFError:
+            logger.error("HITL Error: No TTY attached to accept input. Auto-denying.")
+            return "APPROVAL_DENIED - NO_TTY"
+
+    if choice == 'Y':
+        _hitl_state["approved_action"] = action_summary
+        _hitl_state["timestamp"] = time.time()
+        print("[✔] Approval Granted. Resuming agent execution...\n")
+        return "APPROVAL_GRANTED"
+    else:
+        _hitl_state["approved_action"] = None
+        print("[✖] Approval Denied. Halting agent execution...\n")
+        return "APPROVAL_DENIED"
+
+def check_approval(action_name: str):
+    """Internal helper to verify if approval was granted for the current context."""
+    # Check if approval exists and is less than 5 minutes old
+    if _hitl_state["approved_action"] and (time.time() - _hitl_state["timestamp"] < 300):
+        # In a real system, we'd check if action_name matches the summary. 
+        # For simulation, we check if the agent mentioned the action.
+        if action_name.lower() in _hitl_state["approved_action"].lower():
+            return True
+    return False
+
+# --- Core Logic ---
 
 def extract_debug_msg(stdout: str) -> Optional[str]:
     """Extract the 'msg' field from an Ansible debug task output block."""
@@ -73,7 +137,15 @@ def get_job_output(job_id: int, headers: dict, aap_host: str) -> str:
     resp.raise_for_status()
     return resp.text
 
-def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any]) -> str:
+def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any], is_high_risk: bool = False) -> str:
+    # Check HITL Approval for high-risk tasks
+    if is_high_risk:
+        if not check_approval(template_name):
+            return json.dumps({
+                "status": "failed",
+                "error": f"CRITICAL SECURITY VIOLATION: Execution of '{template_name}' blocked. No valid HITL approval found. You MUST call hitl_request_approval first."
+            })
+
     aap_host = os.getenv("AAP_HOST")
     aap_token = os.getenv("AAP_TOKEN")
 
@@ -114,33 +186,39 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any]) -> str
 
 @mcp.tool()
 def ansible_pcs_node_standby(hostname: str) -> str:
-    """Puts a specific cluster node in STANDBY mode to migrate resources off it."""
-    return run_ansible_job_logic("PCS Node Standby", {"hostname": hostname})
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Puts a specific cluster node in STANDBY mode to migrate resources off it."""
+    return run_ansible_job_logic("PCS Node Standby", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_node_unstandby(hostname: str) -> str:
-    """Takes a specific cluster node out of STANDBY mode."""
-    return run_ansible_job_logic("PCS Node Unstandby", {"hostname": hostname})
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Takes a specific cluster node out of STANDBY mode."""
+    return run_ansible_job_logic("PCS Node Unstandby", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_stop(hostname: str) -> str:
-    """Stops the cluster software (Pacemaker/Corosync) on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Stop", {"hostname": hostname})
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Stops the cluster software (Pacemaker/Corosync) on a specific node."""
+    return run_ansible_job_logic("PCS Cluster Stop", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_start(hostname: str) -> str:
-    """Starts the cluster software (Pacemaker/Corosync) on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Start", {"hostname": hostname})
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Starts the cluster software (Pacemaker/Corosync) on a specific node."""
+    return run_ansible_job_logic("PCS Cluster Start", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_disable(hostname: str) -> str:
-    """Disables the cluster services from starting at boot on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Disable", {"hostname": hostname})
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Disables the cluster services from starting at boot on a specific node."""
+    return run_ansible_job_logic("PCS Cluster Disable", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_enable(hostname: str) -> str:
-    """Enables the cluster services to start at boot on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Enable", {"hostname": hostname})
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Enables the cluster services to start at boot on a specific node."""
+    return run_ansible_job_logic("PCS Cluster Enable", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_health_check(hostname: str) -> str:
@@ -156,13 +234,15 @@ def ansible_pcs_cib_upgrade(hostname: str) -> str:
 
 @mcp.tool()
 def ansible_patch_fleet(hostlist: str) -> str:
-    """Apply security patches to a fleet of servers (no reboot)."""
-    return run_ansible_job_logic("Patch Fleet", {"hostlist": hostlist})
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Apply security patches to a fleet of servers (no reboot)."""
+    return run_ansible_job_logic("Patch Fleet", {"hostlist": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_reboot_fleet(hostlist: str) -> str:
-    """Reboot a fleet of servers."""
-    return run_ansible_job_logic("Reboot Fleet", {"hostlist": hostlist})
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Reboot a fleet of servers."""
+    return run_ansible_job_logic("Reboot Fleet", {"hostlist": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_prepatch_check(hostlist: str) -> str:

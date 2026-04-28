@@ -4,8 +4,9 @@ import time
 import logging
 import sys
 import json
+from datetime import datetime
 
-# Set up logging to both file and stdout for visibility
+# Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -18,35 +19,9 @@ logger = logging.getLogger("AAP-Server")
 
 app = Flask(__name__)
 
-# List of 20 servers for fleet simulation
 FLEET_SERVERS = [f"rhel-prod-{i:02d}.enterprise.local" for i in range(1, 21)]
 
-@app.before_request
-def log_request_info():
-    logger.info("--- AAP REQUEST ---")
-    logger.info(f"Method: {request.method}")
-    logger.info(f"URL: {request.url}")
-    try:
-        if request.content_length and request.is_json:
-            data = request.get_json(silent=True)
-            logger.info(f"Body: {data}")
-        else:
-            data = request.get_data(as_text=True)
-            if data: logger.info(f"Body: {data}")
-            else: logger.info("Body: (empty)")
-    except Exception as e:
-        logger.info(f"Body: (could not log body: {e})")
-
-@app.after_request
-def log_response_info(response):
-    logger.info("--- AAP RESPONSE ---")
-    logger.info(f"Status: {response.status}")
-    return response
-
-# In-memory store for jobs
-jobs = {}
-
-# Template Name to ID mapping - Updated with CIB Upgrade
+# Template ID mapping
 TEMPLATE_MAP = {
     "Limited Run Any Command": 101,
     "Reboot Host": 102,
@@ -70,11 +45,38 @@ TEMPLATE_MAP = {
     "PCS CIB Upgrade": 121
 }
 
+# Job storage
+jobs = {}
+
+def get_iso_now():
+    return datetime.utcnow().isoformat() + "Z"
+
 @app.route('/api/v2/job_templates', methods=['GET'])
 def get_job_templates():
     name = request.args.get('name')
-    template_id = TEMPLATE_MAP.get(name, random.randint(200, 300))
-    return jsonify({"results": [{"id": template_id, "name": name}]})
+    template_id = TEMPLATE_MAP.get(name, 200)
+    
+    # Verbatim AAP response structure
+    return jsonify({
+        "count": 1,
+        "next": None,
+        "previous": None,
+        "results": [
+            {
+                "id": template_id,
+                "type": "job_template",
+                "url": f"/api/v2/job_templates/{template_id}/",
+                "name": name,
+                "description": f"Verbatim mock for {name}",
+                "job_type": "run",
+                "inventory": 1,
+                "project": 1,
+                "playbook": f"{name.lower().replace(' ', '_')}.yml",
+                "created": "2026-01-01T12:00:00.000000Z",
+                "modified": get_iso_now()
+            }
+        ]
+    })
 
 @app.route('/api/v2/job_templates/<int:template_id>/launch/', methods=['POST'])
 def launch_job(template_id):
@@ -85,27 +87,47 @@ def launch_job(template_id):
         if data: extra_vars = data.get('extra_vars', {})
     
     status = "successful"
-    # Logic for failure simulation
+    # Failure simulation
     if template_id in [110, 112, 113, 120, 121] and random.random() < 0.10:
         status = "failed"
     
     jobs[job_id] = {
+        "id": job_id,
         "status": status,
         "extra_vars": extra_vars,
         "template_id": template_id,
-        "start_time": time.time()
+        "start_time": time.time(),
+        "created": get_iso_now()
     }
     
-    logger.info(f"Launched job {job_id} for template {template_id}")
-    return jsonify({"job": job_id}), 201
+    # Verbatim launch response
+    return jsonify({
+        "job": job_id,
+        "type": "job",
+        "url": f"/api/v2/jobs/{job_id}/"
+    }), 201
 
 @app.route('/api/v2/jobs/<int:job_id>/', methods=['GET'])
 def get_job_status(job_id):
     job = jobs.get(job_id)
-    if not job: return jsonify({"error": "Job not found"}), 404
+    if not job: return jsonify({"detail": "Not found."}), 404
+    
     elapsed = time.time() - job["start_time"]
     current_status = "running" if elapsed < 1.0 else job["status"]
-    return jsonify({"status": current_status})
+    
+    # Verbatim job status response
+    return jsonify({
+        "id": job_id,
+        "type": "job",
+        "url": f"/api/v2/jobs/{job_id}/",
+        "name": "Simulated Job",
+        "status": current_status,
+        "failed": current_status == "failed",
+        "started": job["created"],
+        "finished": get_iso_now() if current_status != "running" else None,
+        "job_template": job["template_id"],
+        "extra_vars": json.dumps(job["extra_vars"])
+    })
 
 def generate_fleet_stdout(template_id, status):
     output = []
@@ -151,7 +173,7 @@ def generate_fleet_stdout(template_id, status):
 @app.route('/api/v2/jobs/<int:job_id>/stdout/', methods=['GET'])
 def get_job_stdout(job_id):
     job = jobs.get(job_id)
-    if not job: return "Job not found", 404
+    if not job: return "Not found", 404
     
     template_id = job["template_id"]
     extra_vars = job["extra_vars"]
@@ -160,32 +182,20 @@ def get_job_stdout(job_id):
     if template_id in [110, 111, 112, 113]:
         return generate_fleet_stdout(template_id, job["status"])
     
-    # Specific Tool Outputs
-    if template_id == 114: # Node Standby
-        msg = f"Node {hostname} put in STANDBY mode. Resources migrating..."
-    elif template_id == 115: # Node Unstandby
-        msg = f"Node {hostname} taken out of STANDBY mode. Resources may rebalance."
-    elif template_id == 116: # Cluster Stop
-        msg = f"Cluster services stopped on {hostname}."
-    elif template_id == 117: # Cluster Start
-        msg = f"Cluster services started on {hostname}."
-    elif template_id == 118: # Cluster Disable
-        msg = f"Cluster services disabled at boot on {hostname}."
-    elif template_id == 119: # Cluster Enable
-        msg = f"Cluster services enabled at boot on {hostname}."
-    elif template_id == 120: # Health Check
-        msg = f"Health Check for {hostname}: PASS. All resources active, quorum attained, no failed actions."
-    elif template_id == 121: # CIB Upgrade
-        msg = f"CIB successfully upgraded to the latest version on node {hostname}."
-    elif template_id == 108: # Status
-        msg = f"Cluster Status: Online. Node {hostname} is member. Resources started."
-    else:
-        msg = f"Operation completed on {hostname}"
+    msg = f"Operation completed on {hostname}"
+    if template_id == 114: msg = f"Node {hostname} put in STANDBY mode."
+    elif template_id == 115: msg = f"Node {hostname} taken out of STANDBY mode."
+    elif template_id == 120: msg = "Health Check: PASS"
+    elif template_id == 121: msg = "CIB Upgrade Successful"
     
     return f"""
-PLAY [HA Cluster Management] ***************************************************
+PLAY [Job] *********************************************************************
 TASK [Execute Action] **********************************************************
-ok: [{hostname}] => {{"msg": "{msg}", "changed": true}}
+ok: [{hostname}] => {{
+    "msg": "{msg}",
+    "changed": true,
+    "status": "{job['status']}"
+}}
 PLAY RECAP *********************************************************************
 {hostname:30} : ok=2    changed=1    unreachable=0    failed=0
 """
