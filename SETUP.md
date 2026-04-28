@@ -39,6 +39,7 @@ To handle image loading and volume permissions in an airgapped, rootless Podman 
 | `ansible_pcs_cluster_start` | 5. Rejoin node into the cluster after updates. |
 | `ansible_pcs_node_unstandby` | 6. Take node out of standby. |
 | `ansible_pcs_cluster_enable` | 7. Re-enable cluster start at boot. |
+| `ansible_pcs_cib_upgrade` | 8. Upgrade CIB to latest version (Final Step). |
 
 ### Fleet & Infrastructure
 | Tool | Action |

@@ -147,6 +147,11 @@ def ansible_pcs_health_check(hostname: str) -> str:
     """Retrieves a comprehensive health check for the PCS cluster from a node's perspective."""
     return run_ansible_job_logic("PCS Health Check", {"hostname": hostname})
 
+@mcp.tool()
+def ansible_pcs_cib_upgrade(hostname: str) -> str:
+    """Upgrades the Cluster Information Base (CIB) to the latest supported version after a full cluster update."""
+    return run_ansible_job_logic("PCS CIB Upgrade", {"hostname": hostname})
+
 # --- Fleet Patching & Existing Tools ---
 
 @mcp.tool()

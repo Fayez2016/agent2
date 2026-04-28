@@ -46,7 +46,7 @@ def log_response_info(response):
 # In-memory store for jobs
 jobs = {}
 
-# Template Name to ID mapping - Updated with RHEL HA Recommended Practices
+# Template Name to ID mapping - Updated with CIB Upgrade
 TEMPLATE_MAP = {
     "Limited Run Any Command": 101,
     "Reboot Host": 102,
@@ -60,14 +60,14 @@ TEMPLATE_MAP = {
     "VMware VM Reset": 107,
     "PCS Status": 108,
     "Send Email Notification": 109,
-    # New Granular PCS Tools from Recommended Practices
     "PCS Node Standby": 114,
     "PCS Node Unstandby": 115,
     "PCS Cluster Stop": 116,
     "PCS Cluster Start": 117,
     "PCS Cluster Disable": 118,
     "PCS Cluster Enable": 119,
-    "PCS Health Check": 120
+    "PCS Health Check": 120,
+    "PCS CIB Upgrade": 121
 }
 
 @app.route('/api/v2/job_templates', methods=['GET'])
@@ -86,7 +86,7 @@ def launch_job(template_id):
     
     status = "successful"
     # Logic for failure simulation
-    if template_id in [110, 112, 113, 120] and random.random() < 0.10:
+    if template_id in [110, 112, 113, 120, 121] and random.random() < 0.10:
         status = "failed"
     
     jobs[job_id] = {
@@ -175,6 +175,8 @@ def get_job_stdout(job_id):
         msg = f"Cluster services enabled at boot on {hostname}."
     elif template_id == 120: # Health Check
         msg = f"Health Check for {hostname}: PASS. All resources active, quorum attained, no failed actions."
+    elif template_id == 121: # CIB Upgrade
+        msg = f"CIB successfully upgraded to the latest version on node {hostname}."
     elif template_id == 108: # Status
         msg = f"Cluster Status: Online. Node {hostname} is member. Resources started."
     else:

@@ -36,7 +36,8 @@ This procedure applies to all RHEL 7, 8, and 9 clusters managed via `pacemaker` 
 
 ## 6. Post-Patching Phase (Fleet Wide)
 1. **Final Validation:** Run `ansible_pcs_postpatch_check` to confirm the entire fleet is synchronized.
-2. **Completion Report:** Use `ansible_send_email` to distribute the final success/failure summary.
+2. **CIB Upgrade:** Once all cluster nodes are updated, run `ansible_pcs_cib_upgrade` on one of the nodes to ensure the Cluster Information Base is at the latest version.
+3. **Completion Report:** Use `ansible_send_email` to distribute the final success/failure summary.
 
 ## 7. Contingency Plan
 - **Pre-check Failure:** Do not proceed if `ansible_pcs_prepatch_check` fails.
