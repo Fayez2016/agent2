@@ -7,6 +7,16 @@ services:
       - ./.hermes:/opt/data:Z
       - /run/user/1000/podman/podman.sock:/run/user/1000/podman/podman.sock:Z
       - .:/home/fayez/agent2:Z
+    environment:
+      - TZ=UTC
+      - AAP_HOST=aap-server:5000
+      - AAP_TOKEN=mock-token
+      - CONTAINER_HOST=unix:///run/user/1000/podman/podman.sock
+    networks:
+      - default
+    depends_on:
+      - aap-server
+      - ansible-mcp
     restart: unless-stopped
     deploy:
       resources:
@@ -14,19 +24,12 @@ services:
           cpus: '2.0'
           memory: 4G
     shm_size: '1gb'
-    environment:
-      - TZ=UTC
-      - AAP_HOST=aap-server:5000
-      - AAP_TOKEN=mock-token
-      - CONTAINER_HOST=unix:///run/user/1000/podman/podman.sock
-    depends_on:
-      - aap-server
-      - ansible-mcp
 
   aap-server:
     build:
       context: .
       dockerfile: mock_aap.Dockerfile
+    image: agent2_aap-server
     container_name: aap-server
     restart: unless-stopped
     ports:
@@ -38,10 +41,12 @@ services:
     build:
       context: .
       dockerfile: ansible_mcp.Dockerfile
+    image: agent2_ansible-mcp
     container_name: ansible-mcp
     restart: unless-stopped
     ports:
       - "8000:8000"
+      - "5001:5000" # Mapping host 5001 to container 5000 for HITL UI
     environment:
       - AAP_HOST=aap-server:5000
       - AAP_TOKEN=mock-token
