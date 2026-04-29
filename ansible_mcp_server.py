@@ -132,7 +132,6 @@ def hitl_request_approval(action_summary: str) -> str:
 def check_approval(action_name: str) -> bool:
     """Helper to verify if the last HITL approval matches the intent."""
     if approval_state["last_decision"] == "GRANTED":
-        # In a real system, we'd verify the action_name was what was approved.
         return True
     return False
 
@@ -275,6 +274,25 @@ def ansible_reboot_fleet(hostlist: str) -> str:
     Reboot a fleet of servers."""
     return run_ansible_job_logic("Reboot Fleet", {"hostlist": hostlist}, is_high_risk=True)
 
+@mcp.tool()
+def ansible_pcs_maintenance_mode(enable: bool) -> str:
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Enable or disable global maintenance mode for the cluster."""
+    mode = "true" if enable else "false"
+    return run_ansible_job_logic("PCS Maintenance Mode", {"enable": mode}, is_high_risk=True)
+
+@mcp.tool()
+def ansible_pcs_resource_move(resource_id: str, target_node: str) -> str:
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Manually move a cluster resource to a specific node."""
+    return run_ansible_job_logic("PCS Resource Move", {"resource_id": resource_id, "target_node": target_node}, is_high_risk=True)
+
+@mcp.tool()
+def ansible_pcs_resource_clear(resource_id: str) -> str:
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Clear temporary constraints for a cluster resource."""
+    return run_ansible_job_logic("PCS Resource Clear", {"resource_id": resource_id}, is_high_risk=True)
+
 # Standard tools (No HITL required)
 
 @mcp.tool()
@@ -286,6 +304,11 @@ def ansible_pcs_health_check(hostname: str) -> str:
 def ansible_pcs_cib_upgrade(hostname: str) -> str:
     """Upgrades the Cluster Information Base (CIB) to the latest supported version."""
     return run_ansible_job_logic("PCS CIB Upgrade", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_pcs_constraint_list(hostname: str) -> str:
+    """Retrieves the list of location constraints for the cluster."""
+    return run_ansible_job_logic("PCS Constraint List", {"hostname": hostname})
 
 @mcp.tool()
 def ansible_run_command(command: str, hostname: str) -> str:

@@ -42,7 +42,11 @@ TEMPLATE_MAP = {
     "PCS Cluster Disable": 118,
     "PCS Cluster Enable": 119,
     "PCS Health Check": 120,
-    "PCS CIB Upgrade": 121
+    "PCS CIB Upgrade": 121,
+    "PCS Maintenance Mode": 122,
+    "PCS Resource Move": 123,
+    "PCS Resource Clear": 124,
+    "PCS Constraint List": 125
 }
 
 # Job storage
@@ -113,7 +117,7 @@ def get_job_status(job_id):
     if not job: return jsonify({"detail": "Not found."}), 404
     
     elapsed = time.time() - job["start_time"]
-    current_status = "running" if elapsed < 1.0 else job["status"]
+    current_status = "running" if elapsed < 0.5 else job["status"]
     
     # Verbatim job status response
     return jsonify({
@@ -187,6 +191,12 @@ def get_job_stdout(job_id):
     elif template_id == 115: msg = f"Node {hostname} taken out of STANDBY mode."
     elif template_id == 120: msg = "Health Check: PASS"
     elif template_id == 121: msg = "CIB Upgrade Successful"
+    elif template_id == 122: 
+        mode = "enabled" if extra_vars.get("enable", True) else "disabled"
+        msg = f"Maintenance mode {mode} for cluster."
+    elif template_id == 123: msg = f"Resource {extra_vars.get('resource_id')} moved to {extra_vars.get('target_node')}."
+    elif template_id == 124: msg = f"Constraints cleared for resource {extra_vars.get('resource_id')}."
+    elif template_id == 125: msg = "Location Constraints: p_fs_app (node-01), p_vip_app (node-01). No other constraints."
     
     return f"""
 PLAY [Job] *********************************************************************
