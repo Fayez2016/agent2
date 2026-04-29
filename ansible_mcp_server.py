@@ -30,6 +30,7 @@ mcp = FastMCP(
 approval_state = {
     "status": "IDLE",  # IDLE, PENDING, GRANTED, DENIED
     "action_summary": None,
+    "requested_at": None,
     "last_decision": None
 }
 
@@ -45,7 +46,8 @@ HTML_TEMPLATE = """
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
         .container { background-color: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 500px; width: 90%; }
-        h1 { color: #333; margin-bottom: 20px; }
+        h1 { color: #333; margin-bottom: 10px; }
+        .timestamp { color: #888; font-size: 0.9em; margin-bottom: 20px; }
         .summary { background-color: #fff8e1; border-left: 5px solid #ffc107; padding: 15px; margin: 20px 0; text-align: left; font-style: italic; color: #555; }
         .status-idle { color: #888; font-weight: bold; }
         .status-pending { color: #d32f2f; font-weight: bold; animation: pulse 2s infinite; }
@@ -62,6 +64,7 @@ HTML_TEMPLATE = """
     <div class="container">
         <h1>Hermes HITL Gate</h1>
         {% if status == 'PENDING' %}
+            <div class="timestamp">Requested at: {{ requested_at }}</div>
             <p>The agent is requesting authorization for:</p>
             <div class="summary">{{ action_summary }}</div>
             <form action="/resolve" method="post" class="btn-group">
@@ -110,6 +113,7 @@ def hitl_request_approval(action_summary: str) -> str:
     
     # Reset and set state to PENDING
     approval_state["action_summary"] = action_summary
+    approval_state["requested_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
     approval_state["status"] = "PENDING"
     
     # Wait for web resolution
@@ -120,6 +124,7 @@ def hitl_request_approval(action_summary: str) -> str:
     approval_state["last_decision"] = decision
     approval_state["status"] = "IDLE"
     approval_state["action_summary"] = None
+    approval_state["requested_at"] = None
     
     logger.info(f"HITL Resolved: {decision}")
     
@@ -318,6 +323,7 @@ def ansible_run_command(command: str, hostname: str) -> str:
 if __name__ == "__main__":
     mcp.settings.host = "0.0.0.0"
     mcp.settings.port = 8000
-    mcp.settings.transport_security.allowed_hosts.extend(["*", "ansible-mcp:8000", "ansible-mcp"])
+    # Relax security for local simulation
+    mcp.settings.transport_security.allowed_hosts.extend(["*", "ansible-mcp:8000", "ansible-mcp", "localhost", "127.0.0.1"])
     mcp.settings.transport_security.enable_dns_rebinding_protection = False
     mcp.run(transport="streamable-http")
