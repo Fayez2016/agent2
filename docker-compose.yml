@@ -12,6 +12,13 @@ services:
       - AAP_HOST=aap-server:5000
       - AAP_TOKEN=mock-token
       - CONTAINER_HOST=unix:///run/user/1000/podman/podman.sock
+      - API_SERVER_ENABLED=true
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_KEY=hermes-api-secret
+      - GATEWAY_ALLOW_ALL_USERS=true
+      - DEBUG=1
+    ports:
+      - "8642:8642"
     networks:
       - default
     depends_on:

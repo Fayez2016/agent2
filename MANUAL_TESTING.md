@@ -27,3 +27,39 @@ Verify that all 5 Ansible tools are registered:
 ```bash
 podman exec -u hermes hermes-agent /opt/hermes/.venv/bin/python -c "from tools.registry import registry; print(registry.get_tool_names_for_toolset('devops'))"
 ```
+
+---
+
+## 4. API Server Testing
+Verify the OpenAI-compatible API server is listening and responding correctly.
+
+### Run Diagnostic Script
+Run the automated health check script from your host machine:
+```bash
+python3 test_api_server_health.py
+```
+
+### Manual Verification (CURL)
+If you prefer manual testing, use the following commands:
+
+**Health Check:**
+```bash
+curl -i http://localhost:8642/health
+```
+
+**Model List (Authenticated):**
+```bash
+curl http://localhost:8642/v1/models -H "Authorization: Bearer hermes-api-secret"
+```
+
+**Chat Completion (Authenticated):**
+```bash
+curl http://localhost:8642/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer hermes-api-secret" \
+  -d '{
+    "model": "hermes-agent",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false
+  }'
+```

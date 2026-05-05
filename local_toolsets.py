@@ -276,7 +276,23 @@ TOOLSETS = {
             "cronjob",
             # Home Assistant smart home control (gated on HASS_TOKEN via check_fn)
             "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
-
+            # Ansible MCP tools
+            "mcp_ansible_ansible_run_command",
+            "mcp_ansible_ansible_pcs_node_standby",
+            "mcp_ansible_ansible_pcs_node_unstandby",
+            "mcp_ansible_ansible_pcs_cluster_stop",
+            "mcp_ansible_ansible_pcs_cluster_start",
+            "mcp_ansible_ansible_pcs_cluster_disable",
+            "mcp_ansible_ansible_pcs_cluster_enable",
+            "mcp_ansible_ansible_patch_fleet",
+            "mcp_ansible_ansible_reboot_fleet",
+            "mcp_ansible_ansible_pcs_maintenance_mode",
+            "mcp_ansible_ansible_pcs_resource_move",
+            "mcp_ansible_ansible_pcs_resource_clear",
+            "mcp_ansible_ansible_pcs_health_check",
+            "mcp_ansible_ansible_pcs_cib_upgrade",
+            "mcp_ansible_ansible_pcs_constraint_list",
+            "mcp_ansible_hitl_request_approval",
         ],
         "includes": []
     },
