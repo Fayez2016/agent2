@@ -298,7 +298,44 @@ def ansible_pcs_resource_clear(resource_id: str) -> str:
     Clear temporary constraints for a cluster resource."""
     return run_ansible_job_logic("PCS Resource Clear", {"resource_id": resource_id}, is_high_risk=True)
 
+@mcp.tool()
+def ansible_reboot_host(hostname: str) -> str:
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Reboot a single remote host."""
+    return run_ansible_job_logic("Reboot Host", {"hostname": hostname}, is_high_risk=True)
+
+@mcp.tool()
+def ansible_vmware_reset(vm_name: str) -> str:
+    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    Hard reset a VM via VMware API."""
+    return run_ansible_job_logic("VMware VM Reset", {"vm_name": vm_name}, is_high_risk=True)
+
 # Standard tools (No HITL required)
+
+@mcp.tool()
+def ansible_install_package(hostname: str, package_name: str) -> str:
+    """Installs a system package via DNF/YUM on a remote host."""
+    return run_ansible_job_logic("Install Package", {"hostname": hostname, "package_name": package_name})
+
+@mcp.tool()
+def ansible_expand_fs(hostname: str, mount_point: str) -> str:
+    """Expands a remote filesystem (LVM/XFS) on a specific host."""
+    return run_ansible_job_logic("Expand Filesystem", {"hostname": hostname, "mount_point": mount_point})
+
+@mcp.tool()
+def ansible_fix_pcs(hostname: str) -> str:
+    """Fix/Cleanup PCS cluster resources on a specific node."""
+    return run_ansible_job_logic("Fix PCS Cluster", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_pcs_status(hostname: str) -> str:
+    """Retrieves the basic PCS Cluster health status from a node's perspective."""
+    return run_ansible_job_logic("PCS Status", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_send_email(recipient: str, subject: str, body: str) -> str:
+    """Sends an automated email notification via Ansible AAP."""
+    return run_ansible_job_logic("Send Email Notification", {"recipient": recipient, "subject": subject, "body": body})
 
 @mcp.tool()
 def ansible_pcs_health_check(hostname: str) -> str:

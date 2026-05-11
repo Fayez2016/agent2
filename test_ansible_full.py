@@ -19,10 +19,41 @@ TEST_CASES = [
     {"name": "Cluster Service Stop", "query": "Stop cluster services on rhel-prod-01"},
     {"name": "Fleet Patching", "query": "Apply security patches to the rhel-prod fleet"},
     {"name": "Node Reboot", "query": "Reboot the host rhel-prod-01"},
+    {"name": "Package Installation", "query": "Install the 'httpd' package on rhel-prod-01"},
+    {"name": "Filesystem Expansion", "query": "Expand the /var filesystem on rhel-prod-01"},
+    {"name": "PCS Status Check", "query": "Get the basic PCS cluster status from rhel-prod-01"},
+    {"name": "Fix PCS Cluster", "query": "Fix/Cleanup PCS cluster resources on rhel-prod-01"},
+    {"name": "VMware Reset", "query": "Perform a hard reset on the VM 'rhel-prod-01' via VMware"},
+    {"name": "Send Notification", "query": "Send a success email to admin@enterprise.local with subject 'Patching Complete' and body 'The fleet has been updated.'"},
     {"name": "Node Reintegration (Unstandby)", "query": "Take rhel-prod-01 out of standby mode and start cluster services"},
     {"name": "Maintenance Mode Disable", "query": "Disable global maintenance mode for the cluster"},
     {"name": "CIB Upgrade", "query": "Upgrade the cluster CIB to the latest version on rhel-prod-01"}
 ]
+
+# API Configuration
+API_URL = "http://localhost:8642/v1/chat/completions"
+API_KEY = "hermes-api-secret"
+
+def run_api_query(query):
+    """Execute a query via the Hermes REST API listener."""
+    print(f"Executing REST API Request: {API_URL}")
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "hermes-agent",
+        "messages": [{"role": "user", "content": query}],
+        "stream": False
+    }
+    try:
+        resp = requests.post(API_URL, headers=headers, json=payload, timeout=300)
+        if resp.status_code == 200:
+            return resp.json()['choices'][0]['message']['content']
+        else:
+            return f"API Error: {resp.status_code} - {resp.text}"
+    except Exception as e:
+        return f"API Exception: {str(e)}"
 
 def hitl_auto_approver():
     """Background thread to automatically approve HITL requests."""
@@ -78,11 +109,15 @@ def main():
         for i, case in enumerate(TEST_CASES, 1):
             print(f"\n--- [Step {i}/{len(TEST_CASES)}] Testing: {case['name']} ---")
             
-            # Using the absolute path for hermes to avoid PATH issues
-            query_cmd = f"podman exec -u hermes {AGENT_CONTAINER} /opt/hermes/.venv/bin/python /opt/hermes/.venv/bin/hermes chat -q '{case['query']}' -m {MODEL} -v"
-            
             start_time = time.time()
-            agent_output = run_cmd(query_cmd)
+            # Alternate between CLI and REST API to test both listeners
+            if i % 2 == 0:
+                agent_output = run_api_query(case['query'])
+            else:
+                # Using the absolute path for hermes to avoid PATH issues
+                query_cmd = f"podman exec -u hermes {AGENT_CONTAINER} /opt/hermes/.venv/bin/python /opt/hermes/.venv/bin/hermes chat -q '{case['query']}' -m {MODEL} -v"
+                agent_output = run_cmd(query_cmd)
+            
             duration = time.time() - start_time
             
             # Log interaction
