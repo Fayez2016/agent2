@@ -1,0 +1,33 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Pending Requests</h1>
+{% if requests %}
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Action Summary</th>
+            <th>Requested At</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for req in requests %}
+        <tr>
+            <td>{{ req.id }}</td>
+            <td>{{ req.action_summary }}</td>
+            <td>{{ req.requested_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <td>
+                <form action="{{ url_for('resolve', request_id=req.id) }}" method="post" style="display: inline;">
+                    <button type="submit" name="decision" value="GRANTED" class="btn btn-approve">Approve</button>
+                    <button type="submit" name="decision" value="DENIED" class="btn btn-deny">Reject</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No pending requests.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Resolution History</h1>
+{% if requests %}
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Action Summary</th>
+            <th>Status</th>
+            <th>Resolved At</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for req in requests %}
+        <tr>
+            <td>{{ req.id }}</td>
+            <td>{{ req.action_summary }}</td>
+            <td class="status-{{ req.status.lower() }}">{{ req.status }}</td>
+            <td>{{ req.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if req.resolved_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No history available.</p>
+{% endif %}
+{% endblock %}

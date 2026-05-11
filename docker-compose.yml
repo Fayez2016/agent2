@@ -44,6 +44,37 @@ services:
     networks:
       - default
 
+  db:
+    build:
+      context: ./db
+    image: agent2_hitl-db
+    container_name: hitl-db
+    environment:
+      - POSTGRES_USER=hermes
+      - POSTGRES_PASSWORD=hermes123
+      - POSTGRES_DB=hitl
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
+    networks:
+      - default
+    restart: unless-stopped
+
+  hitl-web:
+    build:
+      context: ./hitl_web
+    image: agent2_hitl-web
+    container_name: hitl-web
+    environment:
+      - DATABASE_URL=postgresql://hermes:hermes123@db:5432/hitl
+      - SECRET_KEY=hitl-secret-key-123
+    ports:
+      - "5001:5000"
+    depends_on:
+      - db
+    networks:
+      - default
+    restart: unless-stopped
+
   ansible-mcp:
     build:
       context: .
@@ -53,10 +84,12 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
-      - "5001:5000" # Mapping host 5001 to container 5000 for HITL UI
     environment:
       - AAP_HOST=aap-server:5000
       - AAP_TOKEN=mock-token
+      - DATABASE_URL=postgresql://hermes:hermes123@db:5432/hitl
+    depends_on:
+      - db
     networks:
       - default
 

@@ -56,24 +56,40 @@ def run_api_query(query):
         return f"API Exception: {str(e)}"
 
 def hitl_auto_approver():
-    """Background thread to automatically approve HITL requests."""
+    """Background thread to automatically approve HITL requests via the authenticated web interface."""
     print("[HITL Bot] Started auto-approver thread...")
+    session = requests.Session()
+    
+    # Login credentials
+    login_data = {"username": "admin", "password": "admin123"}
+    
     while getattr(threading.current_thread(), "do_run", True):
         try:
-            # Check for Pending status in HTML
-            resp = requests.get(HITL_URL, timeout=5)
-            if "PENDING" in resp.text or "authorization" in resp.text:
-                print(f"\n[HITL Bot] Pending request detected! Body contains: ...{resp.text[200:400]}...")
-                print(f"[HITL Bot] Sending APPROVAL (decision=GRANTED) to {HITL_URL}/resolve...")
-                post_resp = requests.post(f"{HITL_URL}/resolve", data={"decision": "GRANTED"}, timeout=5)
-                if post_resp.status_code == 200:
-                    print("[HITL Bot] ✅ Approval successfully recorded.")
-                else:
-                    print(f"[HITL Bot] ❌ Failed to record approval. Status: {post_resp.status_code}")
+            # Attempt to login if not already (or just do it every time for simplicity in test)
+            resp = session.get(HITL_URL, timeout=5)
+            if "Login" in resp.text:
+                session.post(f"{HITL_URL}/login", data=login_data, timeout=5)
+                resp = session.get(HITL_URL, timeout=5)
+
+            # Check for Pending requests in Dashboard
+            if "Approve" in resp.text:
+                # Find the first resolve ID
+                match = re.search(r'/resolve/(\d+)', resp.text)
+                if match:
+                    request_id = match.group(1)
+                    print(f"\n[HITL Bot] Pending request {request_id} detected!")
+                    print(f"[HITL Bot] Sending APPROVAL (decision=GRANTED) to {HITL_URL}/resolve/{request_id}...")
+                    post_resp = session.post(f"{HITL_URL}/resolve/{request_id}", data={"decision": "GRANTED"}, timeout=5)
+                    if post_resp.status_code == 200:
+                        print(f"[HITL Bot] ✅ Approval for {request_id} successfully recorded.")
+                    else:
+                        print(f"[HITL Bot] ❌ Failed to record approval. Status: {post_resp.status_code}")
         except Exception as e:
-            # Silently retry on connection errors during container startup
+            # Silently retry
             pass
         time.sleep(2)
+
+import re
 
 def run_cmd(cmd):
     print(f"Executing: {cmd}")
