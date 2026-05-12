@@ -9,7 +9,7 @@ AGENT_CONTAINER = "hermes-agent"
 SERVER_CONTAINER = "aap-server"
 HITL_URL = "http://localhost:5001"
 LOG_FILE = "ansible_full_communication.log"
-MODEL = "qwen3-coder-next"
+MODEL = "gemma4:31b"
 
 # Full HA Lifecycle Test Cases
 TEST_CASES = [
