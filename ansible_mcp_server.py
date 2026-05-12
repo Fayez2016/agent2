@@ -182,6 +182,11 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any], is_hig
 # --- Tool Definitions ---
 
 @mcp.tool()
+def ansible_get_server_info(hostlist: str) -> str:
+    """Retrieve inventory information (HA status, planned reboot) for a list of servers."""
+    return launch_and_wait("Get Server Info", {"hostlist": hostlist})
+
+@mcp.tool()
 def ansible_pcs_node_standby(hostname: str) -> str:
     """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
     Puts a specific cluster node in STANDBY mode to migrate resources off it."""

@@ -46,11 +46,20 @@ TEMPLATE_MAP = {
     "PCS Maintenance Mode": 122,
     "PCS Resource Move": 123,
     "PCS Resource Clear": 124,
-    "PCS Constraint List": 125
+    "PCS Constraint List": 125,
+    "Get Server Info": 126
 }
 
 # Job storage
 jobs = {}
+
+# Inventory mock data
+INVENTORY_DATA = {
+    "rhel-prod-01.enterprise.local": {"is_ha": True, "planned_reboot": False},
+    "rhel-prod-02.enterprise.local": {"is_ha": True, "planned_reboot": False},
+    "rhel-app-01.enterprise.local": {"is_ha": False, "planned_reboot": True},
+    "rhel-app-02.enterprise.local": {"is_ha": False, "planned_reboot": False},
+}
 
 def get_iso_now():
     return datetime.utcnow().isoformat() + "Z"
@@ -186,8 +195,31 @@ def get_job_stdout(job_id):
     if template_id in [110, 111, 112, 113]:
         return generate_fleet_stdout(template_id, job["status"])
     
+    if template_id == 126:
+        # Get Server Info
+        hostlist = extra_vars.get('hostlist', '')
+        requested_hosts = [h.strip() for h in hostlist.split(',') if h.strip()]
+        result = {}
+        for h in requested_hosts:
+            result[h] = INVENTORY_DATA.get(h, {"is_ha": False, "planned_reboot": False})
+        
+        return f"""
+PLAY [Get Server Info] *********************************************************
+TASK [Output Inventory] ********************************************************
+ok: [localhost] => {{
+    "msg": "Inventory data retrieved",
+    "inventory": {json.dumps(result, indent=8)}
+}}
+PLAY RECAP *********************************************************************
+localhost                      : ok=2    changed=0    unreachable=0    failed=0
+"""
+
     msg = f"Operation completed on {hostname}"
-    if template_id == 114: msg = f"Node {hostname} put in STANDBY mode."
+    if template_id == 110:
+        # Add reboot_required to patch fleet logic (simulated)
+        reboot_req = random.random() < 0.3
+        msg = f"Patching completed on {hostname}. Reboot required: {str(reboot_req).lower()}"
+    elif template_id == 114: msg = f"Node {hostname} put in STANDBY mode."
     elif template_id == 115: msg = f"Node {hostname} taken out of STANDBY mode."
     elif template_id == 120: msg = "Health Check: PASS"
     elif template_id == 121: msg = "CIB Upgrade Successful"
