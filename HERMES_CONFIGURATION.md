@@ -46,11 +46,19 @@ platform_toolsets:
 
 The agent's behavior and system integration are controlled via environment variables.
 
-### API Server Settings
+### API Server & Dashboard Settings
 - `API_SERVER_ENABLED=true`: Activates the OpenAI-compatible REST listener.
 - `API_SERVER_HOST=0.0.0.0`: Binds the server to all interfaces.
 - `API_SERVER_KEY=hermes-api-secret`: The Bearer token required for authentication.
 - `API_SERVER_PORT=8642`: (Internal) Port the agent listens on.
+- `HERMES_DASHBOARD_TUI=1`: Enables the embedded terminal TUI within the web dashboard.
+
+### Dashboard Startup
+The dashboard is launched via the command:
+`hermes dashboard --host 0.0.0.0 --insecure --no-open`
+- `--host 0.0.0.0`: Allows external access to the dashboard container.
+- `--insecure`: Required for binding to non-localhost addresses.
+- `--no-open`: Prevents the agent from attempting to open a browser window inside the container.
 
 ### System Integration
 - `CONTAINER_HOST=unix:///run/user/1000/podman/podman.sock`: Allows Hermes to manage other containers (e.g., for the `code_execution` sandbox).

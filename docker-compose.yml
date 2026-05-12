@@ -17,14 +17,19 @@ services:
       - API_SERVER_KEY=hermes-api-secret
       - GATEWAY_ALLOW_ALL_USERS=true
       - DEBUG=1
+      - HERMES_DASHBOARD_TUI=1
     ports:
       - "8642:8642"
+      - "9119:9119"
     networks:
       - default
     depends_on:
       - aap-server
       - ansible-mcp
     restart: unless-stopped
+    entrypoint: /bin/bash
+    command: >
+      -c "/opt/hermes/docker/entrypoint.sh dashboard --host 0.0.0.0 --insecure --no-open & /opt/hermes/docker/entrypoint.sh gateway run"
     deploy:
       resources:
         limits:
