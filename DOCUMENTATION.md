@@ -5,7 +5,9 @@
 The system is designed as a microservices architecture orchestrated via Podman Compose. It provides an AI-driven automation layer for enterprise infrastructure (RHEL High Availability clusters) with a strict Human-in-the-Loop (HITL) security gate.
 
 ### Application Architecture
-- **Hermes Agent (`hermes`):** The primary brain. Handles natural language processing, reasoning, and tool selection.
+- **Hermes Agent (`hermes`):** The primary brain. Handles natural language processing, reasoning, and tool selection. Its behavior is governed by two configuration files:
+    - **`SOUL.md`:** Defines the agent's global identity (Senior Linux Admin/SRE), action-oriented mindset, and "Literal Interpretation" rule for hostnames.
+    - **`AGENTS.md`:** Defines local environment constraints, specifically the "No Direct SSH" policy and the mandate for "Ansible-Only" operations.
 - **Ansible MCP Server (`ansible-mcp`):** A Model Context Protocol bridge that translates agent requests into Ansible Automation Platform (AAP) API calls.
 - **HITL Web Interface (`hitl-web`):** A Flask-based authenticated dashboard for human operators to review and approve high-risk actions.
 - **Persistent Database (`db`):** A PostgreSQL instance storing user credentials and a durable audit log of all HITL requests and decisions.

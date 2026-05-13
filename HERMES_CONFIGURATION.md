@@ -104,5 +104,22 @@ curl http://localhost:8642/v1/chat/completions \
 }
 ```
 
-## 5. Persistent Data
-All agent state (sessions, memory, skills) is stored in `/opt/data`. Ensure the host volume mapping in `docker-compose.yml` is preserved to maintain continuity across restarts.
+## 5. Behavioral Configuration (`SOUL.md` & `AGENTS.md`)
+
+Hermes utilizes specific Markdown-based configuration layers to define its persona and technical constraints.
+
+### Global Persona (`SOUL.md`)
+Located at `/opt/data/SOUL.md` inside the container (mapped to `./.hermes/SOUL.md` on the host).
+- **Identity:** Senior Linux Administrator and Action-Oriented SRE.
+- **Literal Interpretation:** Treats all provided nouns (e.g., "pizza") strictly as technical hostnames or service names, ignoring conversational context.
+- **Recovery-First:** Prioritizes rapid service restoration over theoretical discussion.
+- **Verify-First:** Mandates a validation step before disruptive changes.
+
+### Local Context (`AGENTS.md`)
+Located in the project root (`/home/fayez/agent2/AGENTS.md`).
+- **Access Constraints:** Explicitly prohibits direct SSH access to the fleet.
+- **Tooling Mandate:** All fleet operations MUST use the Ansible MCP tools.
+- **Workflow Definitions:** Distinguishes between Incident Response (immediate recovery) and Planned Activities (systematic execution of SOPs).
+
+## 6. Persistent Data
+All agent state (sessions, memory, skills, and the `SOUL.md` file) is stored in `/opt/data`. Ensure the host volume mapping in `docker-compose.yml` is preserved to maintain continuity across restarts.
