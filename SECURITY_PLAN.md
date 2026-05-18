@@ -49,6 +49,13 @@ Address immediate critical and high-severity security vulnerabilities within the
     - Removed the volume mount and `CONTAINER_HOST` environment variable from `docker-compose.yml`.
 - **Validation:** Verified agent functionality via `test_ansible_complete.py` without the socket mount.
 
+### Step 6: Implement Database Persistence - [COMPLETED]
+- **Issue:** HITL history was lost on container recreation because the database lacked a persistent volume.
+- **Implementation:** 
+    - Added a named volume `hitl-db-data` to the `db` service in `docker-compose.yml`.
+    - Mapped the volume to `/var/lib/postgresql/data`.
+- **Validation:** Verified that history is retained after a `podman-compose down && podman-compose up -d`.
+
 ## Final Verification Summary
 - **HITL Integrity:** Confirmed. Approvals are now strictly tied to action names.
 - **Command Security:** Confirmed. Arbitrary commands now trigger the HITL gate.
