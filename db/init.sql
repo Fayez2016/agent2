@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS hitl_requests (
     id SERIAL PRIMARY KEY,
+    action_name VARCHAR(100), -- New column for strict matching
     action_summary TEXT NOT NULL,
     status VARCHAR(20) DEFAULT 'PENDING', -- PENDING, GRANTED, DENIED
     requested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

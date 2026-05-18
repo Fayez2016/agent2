@@ -25,6 +25,7 @@ class User(UserMixin, db.Model):
 class HITLRequest(db.Model):
     __tablename__ = 'hitl_requests'
     id = db.Column(db.Integer, primary_key=True)
+    action_name = db.Column(db.String(100))
     action_summary = db.Column(db.Text, nullable=False)
     status = db.Column(db.String(20), default='PENDING')
     requested_at = db.Column(db.DateTime, default=datetime.utcnow)

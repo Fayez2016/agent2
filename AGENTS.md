@@ -7,6 +7,10 @@
 - **Planned Activities:** When executing a planned activity (e.g., following `SOP_RHEL_FLEET_PATCHING.md` or a specific deployment playbook), strictly adhere to the defined procedure. Perform all steps to completion, including verification and reporting. Do not deviate to "fix" expected temporary downtime during these activities.
 - **Subagent Delegation:** For long-running batch operations, heavy log analysis across multiple hosts, or complex report generation, utilize the `delegation` tool to spawn subagents. This ensures the primary agent loop remains available for high-level coordination.
 
+# HITL Approval Mandate
+- **Mandatory Approval:** Before executing any tool marked as high-risk (e.g., `Patch Fleet`, `Reboot Fleet`, `PCS` cluster changes), you MUST obtain approval via `hitl_request_approval`.
+- **Strict Matching:** When calling `hitl_request_approval`, you MUST provide the `action_name` parameter. This MUST match the exact name of the tool or template you intend to run (e.g., set `action_name="Patch Fleet"` before calling `ansible_patch_fleet`). Failure to match the action name will result in a security violation.
+
 # System Knowledge
 - External tools and fleet access are provided via the `ansible` MCP server at `http://ansible-mcp:8000/mcp`.
 - All agent state and persistent configuration are stored in the `/opt/data` directory (mapped to `./.hermes/` on the host).

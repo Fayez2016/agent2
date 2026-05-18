@@ -34,20 +34,21 @@ def get_db_connection():
 # --- HITL MCP Tool ---
 
 @mcp.tool()
-def hitl_request_approval(action_summary: str) -> str:
+def hitl_request_approval(action_summary: str, action_name: Optional[str] = None) -> str:
     """
     CRITICAL: Human-in-the-Loop authorization gate.
     Presents the action summary to the administrator via a web interface and waits for Y/N approval.
     MUST be called before any high-risk maintenance tool.
+    Optional: action_name should be the specific tool or template name (e.g., 'Patch Fleet').
     """
-    logger.warning(f"HITL REQUIRED: {action_summary}")
+    logger.warning(f"HITL REQUIRED: {action_summary} (Action: {action_name})")
     
     conn = get_db_connection()
     cur = conn.cursor()
     try:
         cur.execute(
-            "INSERT INTO hitl_requests (action_summary, status) VALUES (%s, %s) RETURNING id",
-            (action_summary, 'PENDING')
+            "INSERT INTO hitl_requests (action_summary, action_name, status) VALUES (%s, %s, %s) RETURNING id",
+            (action_summary, action_name, 'PENDING')
         )
         request_id = cur.fetchone()[0]
         conn.commit()
@@ -73,19 +74,18 @@ def hitl_request_approval(action_summary: str) -> str:
         conn.close()
 
 def check_approval(action_name: str) -> bool:
-    """Helper to verify if a recently GRANTED HITL approval exists for this action."""
+    """Helper to verify if a recently GRANTED HITL approval exists for this specific action."""
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Look for a GRANTED request in the last 10 minutes that matches the action name
-        # We search for the action name within the action_summary
+        # Look for a GRANTED request in the last 10 minutes that matches the action name EXACTLY
         cur.execute(
             """SELECT id FROM hitl_requests 
                WHERE status = 'GRANTED' 
-               AND action_summary ILIKE %s 
+               AND action_name = %s 
                AND resolved_at > NOW() - INTERVAL '10 minutes'
                ORDER BY resolved_at DESC LIMIT 1""",
-            (f"%{action_name}%",)
+            (action_name,)
         )
         result = cur.fetchone()
         return result is not None
