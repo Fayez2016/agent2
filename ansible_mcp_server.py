@@ -28,7 +28,10 @@ mcp = FastMCP(
 # --- Database Helper ---
 
 def get_db_connection():
-    db_url = os.getenv('DATABASE_URL', 'postgresql://hermes:hermes123@db:5432/hitl')
+    db_url = os.getenv('DATABASE_URL')
+    if not db_url:
+        logger.error("DATABASE_URL environment variable not set")
+        raise RuntimeError("DATABASE_URL environment variable not set")
     return psycopg2.connect(db_url)
 
 # --- HITL MCP Tool ---

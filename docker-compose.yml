@@ -9,12 +9,12 @@ services:
       - .:/home/fayez/agent2:Z
     environment:
       - TZ=UTC
-      - AAP_HOST=aap-server:5000
-      - AAP_TOKEN=mock-token
+      - AAP_HOST=${AAP_HOST}
+      - AAP_TOKEN=${AAP_TOKEN}
       - CONTAINER_HOST=unix:///run/user/1000/podman/podman.sock
       - API_SERVER_ENABLED=true
       - API_SERVER_HOST=0.0.0.0
-      - API_SERVER_KEY=hermes-api-secret
+      - API_SERVER_KEY=${API_SERVER_KEY}
       - GATEWAY_ALLOW_ALL_USERS=true
       - DEBUG=1
       - HERMES_DASHBOARD=1
@@ -53,9 +53,9 @@ services:
     image: agent2_hitl-db
     container_name: hitl-db
     environment:
-      - POSTGRES_USER=hermes
-      - POSTGRES_PASSWORD=hermes123
-      - POSTGRES_DB=hitl
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
     networks:
@@ -68,8 +68,8 @@ services:
     image: agent2_hitl-web
     container_name: hitl-web
     environment:
-      - DATABASE_URL=postgresql://hermes:hermes123@db:5432/hitl
-      - SECRET_KEY=hitl-secret-key-123
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
     ports:
       - "5001:5000"
     depends_on:
@@ -88,9 +88,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - AAP_HOST=aap-server:5000
-      - AAP_TOKEN=mock-token
-      - DATABASE_URL=postgresql://hermes:hermes123@db:5432/hitl
+      - AAP_HOST=${AAP_HOST}
+      - AAP_TOKEN=${AAP_TOKEN}
+      - DATABASE_URL=${DATABASE_URL}
     depends_on:
       - db
     networks:

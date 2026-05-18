@@ -12,7 +12,8 @@ SERVER_CONTAINER = "aap-server"
 HITL_URL = "http://localhost:5001"
 LOG_FILE = "ansible_complete_test.log"
 API_URL = "http://localhost:8642/v1/chat/completions"
-API_KEY = "hermes-api-secret"
+API_KEY = os.getenv("API_SERVER_KEY", "hermes-api-secret") # Fallback for local testing if env not sourced
+HITL_PASSWORD = os.getenv("HITL_PASSWORD", "admin123")
 
 # Test Phases
 # Phase 1: Individual Tool/Command Testing (Low-level validation)
@@ -71,7 +72,7 @@ def hitl_auto_approver():
     """Background thread to automatically approve HITL requests via the authenticated web interface."""
     print("[HITL Bot] Started auto-approver thread...")
     session = requests.Session()
-    login_data = {"username": "admin", "password": "admin123"}
+    login_data = {"username": "admin", "password": HITL_PASSWORD}
     
     while getattr(threading.current_thread(), "do_run", True):
         try:
