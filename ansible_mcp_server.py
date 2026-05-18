@@ -309,8 +309,9 @@ def ansible_pcs_constraint_list(hostname: str) -> str:
 
 @mcp.tool()
 def ansible_run_command(command: str, hostname: str) -> str:
-    """Executes a shell command on a remote host via Ansible AAP."""
-    return run_ansible_job_logic("Limited Run Any Command", {"hostlist": hostname, "agent_comand": command})
+    """Executes a shell command on a remote host via Ansible AAP. 
+    CRITICAL: High-risk maintenance tool. You MUST obtain hitl_request_approval before using this."""
+    return run_ansible_job_logic("Limited Run Any Command", {"hostlist": hostname, "agent_comand": command}, is_high_risk=True)
 
 if __name__ == "__main__":
     mcp.settings.host = "0.0.0.0"
