@@ -21,6 +21,7 @@
             <td>{{ req.requested_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
             <td>
                 <form action="{{ url_for('resolve', request_id=req.id) }}" method="post" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" name="decision" value="GRANTED" class="btn btn-approve">Approve</button>
                     <button type="submit" name="decision" value="DENIED" class="btn btn-deny">Reject</button>
                 </form>

@@ -1,6 +1,6 @@
 FROM docker.io/python:3.11-slim
 
-RUN pip install flask flask-sqlalchemy flask-login psycopg2-binary werkzeug
+RUN pip install flask flask-sqlalchemy flask-login psycopg2-binary werkzeug flask-wtf
 
 COPY . /app
 WORKDIR /app

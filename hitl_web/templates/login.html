@@ -3,6 +3,7 @@
 <div style="max-width: 400px; margin: 100px auto;">
     <h1>Login</h1>
     <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div style="margin-bottom: 15px;">
             <label style="display: block; margin-bottom: 5px;">Username</label>
             <input type="text" name="username" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;" required>

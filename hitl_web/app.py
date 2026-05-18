@@ -2,6 +2,7 @@ import os
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
@@ -10,6 +11,12 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'hitl-secret-key-123')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://hermes:hermes123@db:5432/hitl')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Security Configurations
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+csrf = CSRFProtect(app)
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.login_view = 'login'
