@@ -35,6 +35,7 @@ services:
       - OPENAI_BASE_URL=http://ollama:11434/v1
       - OPENAI_API_KEY=ollama
       - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_NUM_CTX=65536
     ports:
       - "8642:8642"
       - "9119:9119"
