@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hitl-web
+  namespace: agent2-airgap
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hitl-web
+  template:
+    metadata:
+      labels:
+        app: hitl-web
+    spec:
+      containers:
+      - name: hitl-web
+        image: quay.io/fayez2016/hitl-web:staging
+        ports:
+        - containerPort: 5000
+        env:
+        - name: DATABASE_URL
+          value: postgresql://hermes:secret456@db:5432/hitl
+        - name: SECRET_KEY
+          value: hitl-secret-key-123
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hitl-web
+  namespace: agent2-airgap
+spec:
+  type: NodePort
+  ports:
+  - port: 5000
+    targetPort: 5000
+    nodePort: 30501
+  selector:
+    app: hitl-web

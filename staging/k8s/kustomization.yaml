@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agent2-airgap
+
+resources:
+- namespace.yaml
+- 01-postgres-statefulset.yaml
+- 02-ollama-deployment.yaml
+- 03-aap-server-deployment.yaml
+- 04-ansible-mcp-deployment.yaml
+- 05-hitl-web-deployment.yaml
+- 06-hermes-agent-deployment.yaml

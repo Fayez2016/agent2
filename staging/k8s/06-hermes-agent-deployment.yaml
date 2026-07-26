@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-agent
+  namespace: agent2-airgap
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hermes-agent
+  template:
+    metadata:
+      labels:
+        app: hermes-agent
+    spec:
+      containers:
+      - name: hermes-agent
+        image: quay.io/fayez2016/hermes-agent:staging
+        command: ["gateway", "run"]
+        ports:
+        - containerPort: 8642
+        - containerPort: 9119
+        env:
+        - name: TZ
+          value: UTC
+        - name: AAP_HOST
+          value: aap-server:5000
+        - name: AAP_TOKEN
+          value: mock-token
+        - name: API_SERVER_ENABLED
+          value: "true"
+        - name: API_SERVER_HOST
+          value: 0.0.0.0
+        - name: API_SERVER_KEY
+          value: hermes-api-secret
+        - name: GATEWAY_ALLOW_ALL_USERS
+          value: "true"
+        - name: OLLAMA_HOST
+          value: http://ollama:11434
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes-agent
+  namespace: agent2-airgap
+spec:
+  type: NodePort
+  ports:
+  - name: api
+    port: 8642
+    targetPort: 8642
+    nodePort: 30642
+  - name: gateway
+    port: 9119
+    targetPort: 9119
+    nodePort: 30919
+  selector:
+    app: hermes-agent

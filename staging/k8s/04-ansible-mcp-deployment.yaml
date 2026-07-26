@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ansible-mcp
+  namespace: agent2-airgap
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ansible-mcp
+  template:
+    metadata:
+      labels:
+        app: ansible-mcp
+    spec:
+      containers:
+      - name: ansible-mcp
+        image: quay.io/fayez2016/ansible-mcp:staging
+        ports:
+        - containerPort: 8000
+        env:
+        - name: AAP_HOST
+          value: aap-server:5000
+        - name: AAP_TOKEN
+          value: mock-token
+        - name: DATABASE_URL
+          value: postgresql://hermes:secret456@db:5432/hitl
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ansible-mcp
+  namespace: agent2-airgap
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8000
+  selector:
+    app: ansible-mcp

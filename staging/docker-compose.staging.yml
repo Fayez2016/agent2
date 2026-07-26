@@ -1,0 +1,101 @@
+services:
+  ollama:
+    image: localhost/local-ollama:gemma4-12b
+    container_name: staging-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama:Z
+    networks:
+      - staging_net
+
+  hermes:
+    image: localhost/local-hermes:latest
+    container_name: staging-hermes-agent
+    command: gateway run
+    volumes:
+      - ../.hermes:/opt/data:Z
+      - ../:/home/fayez/agent2:Z
+    environment:
+      - TZ=UTC
+      - AAP_HOST=${AAP_HOST}
+      - AAP_TOKEN=${AAP_TOKEN}
+      - API_SERVER_ENABLED=true
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_KEY=${API_SERVER_KEY}
+      - GATEWAY_ALLOW_ALL_USERS=true
+      - DEBUG=1
+      - HERMES_DASHBOARD=1
+      - HERMES_DASHBOARD_TUI=1
+      - OLLAMA_HOST=http://ollama:11434
+    ports:
+      - "8642:8642"
+      - "9119:9119"
+    networks:
+      - staging_net
+    depends_on:
+      - aap-server
+      - ansible-mcp
+      - ollama
+    restart: unless-stopped
+
+  aap-server:
+    image: agent2_aap-server:latest
+    container_name: staging-aap-server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    networks:
+      - staging_net
+
+  db:
+    image: agent2_hitl-db:latest
+    container_name: staging-hitl-db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - ../db/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
+      - hitl-db-data:/var/lib/postgresql/data:Z
+    networks:
+      - staging_net
+    restart: unless-stopped
+
+  hitl-web:
+    image: agent2_hitl-web:latest
+    container_name: staging-hitl-web
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+    ports:
+      - "5001:5000"
+    depends_on:
+      - db
+    networks:
+      - staging_net
+    restart: unless-stopped
+
+  ansible-mcp:
+    image: agent2_ansible-mcp:latest
+    container_name: staging-ansible-mcp
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - AAP_HOST=${AAP_HOST}
+      - AAP_TOKEN=${AAP_TOKEN}
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - db
+    networks:
+      - staging_net
+
+networks:
+  staging_net:
+    name: agent2_staging_net
+
+volumes:
+  hitl-db-data:
+  ollama-data:

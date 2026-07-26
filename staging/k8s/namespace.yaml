@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent2-airgap
+  labels:
+    environment: airgapped
+    app.kubernetes.io/name: agent2-platform
