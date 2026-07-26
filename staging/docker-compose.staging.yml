@@ -28,6 +28,8 @@ services:
       - DEBUG=1
       - HERMES_DASHBOARD=1
       - HERMES_DASHBOARD_TUI=1
+      - HERMES_PROVIDER=ollama
+      - HERMES_MODEL=gemma4:12b
       - OLLAMA_HOST=http://ollama:11434
     ports:
       - "8642:8642"
