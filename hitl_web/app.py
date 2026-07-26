@@ -12,9 +12,14 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Security Configurations
-app.config['SESSION_COOKIE_SECURE'] = True
+# Only enforce secure cookies if explicitly requested (e.g., in production behind HTTPS)
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('ENFORCE_SSL', 'false').lower() == 'true'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# Set SameSite to None/Lax depending on security needs; for local HTTP testing, Lax or None is required
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax' if app.config['SESSION_COOKIE_SECURE'] else None
+
+# Enable Debug mode to see CSRF errors in container logs
+app.debug = True
 
 if not app.config['SECRET_KEY']:
     raise RuntimeError("SECRET_KEY environment variable is not set")

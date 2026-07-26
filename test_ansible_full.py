@@ -59,35 +59,62 @@ def hitl_auto_approver():
     """Background thread to automatically approve HITL requests via the authenticated web interface."""
     print("[HITL Bot] Started auto-approver thread...")
     session = requests.Session()
-    
-    # Login credentials
     login_data = {"username": "admin", "password": "admin123"}
     
+    is_logged_in = False
+
     while getattr(threading.current_thread(), "do_run", True):
         try:
-            # Attempt to login if not already (or just do it every time for simplicity in test)
+            # Check the current status
             resp = session.get(HITL_URL, timeout=5)
-            if "Login" in resp.text:
-                session.post(f"{HITL_URL}/login", data=login_data, timeout=5)
-                resp = session.get(HITL_URL, timeout=5)
-
-            # Check for Pending requests in Dashboard
-            if "Approve" in resp.text:
-                # Find the first resolve ID
-                match = re.search(r'/resolve/(\d+)', resp.text)
-                if match:
-                    request_id = match.group(1)
-                    print(f"\n[HITL Bot] Pending request {request_id} detected!")
-                    print(f"[HITL Bot] Sending APPROVAL (decision=GRANTED) to {HITL_URL}/resolve/{request_id}...")
-                    post_resp = session.post(f"{HITL_URL}/resolve/{request_id}", data={"decision": "GRANTED"}, timeout=5)
-                    if post_resp.status_code == 200:
-                        print(f"[HITL Bot] ✅ Approval for {request_id} successfully recorded.")
+            
+            # 1. Determine if we need to log in
+            needs_login = "Login" in resp.text and "Logout" not in resp.text
+            
+            if needs_login:
+                print("[HITL Bot] Authentication required. Logging in...")
+                csrf_match = re.search(r'name="csrf_token" value="(.*?)"', resp.text)
+                if csrf_match:
+                    token = csrf_match.group(1)
+                    login_payload = {**login_data, "csrf_token": token}
+                    login_resp = session.post(f"{HITL_URL}/login", data=login_payload, timeout=5, allow_redirects=True)
+                    if login_resp.status_code == 200 and "Logout" in login_resp.text:
+                        print("[HITL Bot] Successfully logged in.")
+                        is_logged_in = True
+                        resp = login_resp
                     else:
-                        print(f"[HITL Bot] ❌ Failed to record approval. Status: {post_resp.status_code}")
+                        print(f"[HITL Bot] Login failed with status {login_resp.status_code}. Retrying...")
+                        time.sleep(5)
+                        continue
+                else:
+                    print("[HITL Bot] CRITICAL: Could not find CSRF token on login page.")
+                    time.sleep(5)
+                    continue
+
+            # 2. Process pending approvals
+            if "Approve" in resp.text:
+                forms = re.findall(r'action="/resolve/(\d+)".*?name="csrf_token" value="(.*?)"', resp.text, re.DOTALL)
+                
+                if not forms:
+                    print("[HITL Bot] Found 'Approve' text but no valid resolve forms/tokens.")
+                
+                for request_id, csrf_token in forms:
+                    print(f"\n[HITL Bot] Pending request {request_id} detected! Sending APPROVAL...")
+                    appr_resp = session.post(
+                        f"{HITL_URL}/resolve/{request_id}", 
+                        data={"decision": "GRANTED", "csrf_token": csrf_token}, 
+                        timeout=5
+                    )
+                    if appr_resp.status_code == 200:
+                        print(f"[HITL Bot] Request {request_id} approved successfully.")
+                    else:
+                        print(f"[HITL Bot] Approval failed for {request_id} (Status: {appr_resp.status_code})")
+        
         except Exception as e:
-            # Silently retry
-            pass
-        time.sleep(2)
+            print(f"[HITL Bot] Runtime Error: {e}")
+        
+        time.sleep(5)
+
 
 import re
 

@@ -37,12 +37,16 @@ def get_db_connection():
 # --- HITL MCP Tool ---
 
 @mcp.tool()
-def hitl_request_approval(action_summary: str, action_name: Optional[str] = None) -> str:
+def hitl_request_approval(action_summary: str, action_name: str) -> str:
     """
     CRITICAL: Human-in-the-Loop authorization gate.
     Presents the action summary to the administrator via a web interface and waits for Y/N approval.
-    MUST be called before any high-risk maintenance tool.
-    Optional: action_name should be the specific tool or template name (e.g., 'Patch Fleet').
+    
+    REQUIRED:
+    - action_summary: A detailed description of what you are doing and why.
+    - action_name: MUST be the exact tool or template name you intend to execute (e.g. 'Patch Fleet', 'Reboot Host').
+    
+    You MUST call this before any tool marked as high-risk.
     """
     logger.warning(f"HITL REQUIRED: {action_summary} (Action: {action_name})")
     
@@ -56,21 +60,26 @@ def hitl_request_approval(action_summary: str, action_name: Optional[str] = None
         request_id = cur.fetchone()[0]
         conn.commit()
         
-        logger.info(f"HITL Request {request_id} created. Waiting for resolution...")
+        logger.info(f"HITL Request {request_id} created. Waiting for resolution (60s timeout)...")
         
-        # Poll for resolution
-        while True:
+        # Poll for resolution with timeout
+        timeout = 60
+        start_time = time.time()
+        while time.time() - start_time < timeout:
             cur.execute("SELECT status FROM hitl_requests WHERE id = %s", (request_id,))
             status = cur.fetchone()[0]
             if status != 'PENDING':
                 break
             time.sleep(2)
+        else:
+            status = 'TIMEOUT'
         
-        logger.info(f"HITL Request {request_id} resolved: {status}")
+        logger.info(f"HITL Request {request_id} resolved/expired: {status}")
         return json.dumps({
-            "status": "successful",
+            "status": "successful" if status != 'TIMEOUT' else "failed",
             "approval": status,
-            "request_id": request_id
+            "request_id": request_id,
+            "message": "Approval granted" if status == 'GRANTED' else "Approval denied" if status == 'DENIED' else "Timed out waiting for human approval. Please try again."
         })
     finally:
         cur.close()
@@ -187,7 +196,7 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any], is_hig
 @mcp.tool()
 def ansible_get_server_info(hostlist: str) -> str:
     """Retrieve inventory information (HA status, planned reboot) for a list of servers."""
-    return launch_and_wait("Get Server Info", {"hostlist": hostlist})
+    return run_ansible_job_logic("Get Server Info", {"hostlist": hostlist})
 
 @mcp.tool()
 def ansible_pcs_node_standby(hostname: str) -> str:

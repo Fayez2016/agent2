@@ -74,27 +74,62 @@ def hitl_auto_approver():
     session = requests.Session()
     login_data = {"username": "admin", "password": HITL_PASSWORD}
     
+    is_logged_in = False
+
     while getattr(threading.current_thread(), "do_run", True):
         try:
+            # Check the current status
             resp = session.get(HITL_URL, timeout=5)
-            if "Login" in resp.text:
+            
+            # 1. Determine if we need to log in
+            # We need to log in if "Login" is present but "Logout" is NOT present
+            needs_login = "Login" in resp.text and "Logout" not in resp.text
+            
+            if needs_login:
+                print("[HITL Bot] Authentication required. Logging in...")
                 csrf_match = re.search(r'name="csrf_token" value="(.*?)"', resp.text)
                 if csrf_match:
-                    login_data["csrf_token"] = csrf_match.group(1)
-                session.post(f"{HITL_URL}/login", data=login_data, timeout=5)
-                resp = session.get(HITL_URL, timeout=5)
+                    token = csrf_match.group(1)
+                    login_payload = {**login_data, "csrf_token": token}
+                    # Post to login and follow redirects to ensure we land on a valid page
+                    login_resp = session.post(f"{HITL_URL}/login", data=login_payload, timeout=5, allow_redirects=True)
+                    if login_resp.status_code == 200 and "Logout" in login_resp.text:
+                        print("[HITL Bot] Successfully logged in.")
+                        is_logged_in = True
+                        resp = login_resp # Use the new response (the dashboard)
+                    else:
+                        print(f"[HITL Bot] Login failed with status {login_resp.status_code}. Retrying...")
+                        time.sleep(5)
+                        continue
+                else:
+                    print("[HITL Bot] CRITICAL: Could not find CSRF token on login page.")
+                    time.sleep(5)
+                    continue
 
+            # 2. Process pending approvals
             if "Approve" in resp.text:
-                match = re.search(r'/resolve/(\d+)', resp.text)
-                csrf_match = re.search(r'name="csrf_token" value="(.*?)"', resp.text)
-                if match and csrf_match:
-                    request_id = match.group(1)
-                    csrf_token = csrf_match.group(1)
+                # Find all resolve forms. Regex captures request_id and the unique CSRF token for that form.
+                forms = re.findall(r'action="/resolve/(\d+)".*?name="csrf_token" value="(.*?)"', resp.text, re.DOTALL)
+                
+                if not forms:
+                    print("[HITL Bot] Found 'Approve' text but no valid resolve forms/tokens.")
+                
+                for request_id, csrf_token in forms:
                     print(f"\n[HITL Bot] Pending request {request_id} detected! Sending APPROVAL...")
-                    session.post(f"{HITL_URL}/resolve/{request_id}", data={"decision": "GRANTED", "csrf_token": csrf_token}, timeout=5)
-        except Exception:
-            pass
-        time.sleep(2)
+                    appr_resp = session.post(
+                        f"{HITL_URL}/resolve/{request_id}", 
+                        data={"decision": "GRANTED", "csrf_token": csrf_token}, 
+                        timeout=5
+                    )
+                    if appr_resp.status_code == 200:
+                        print(f"[HITL Bot] Request {request_id} approved successfully.")
+                    else:
+                        print(f"[HITL Bot] Approval failed for {request_id} (Status: {appr_resp.status_code})")
+        
+        except Exception as e:
+            print(f"[HITL Bot] Runtime Error: {e}")
+        
+        time.sleep(5) # Slow down polling to be kind to the server and logs
 
 def log(header, content):
     with open(LOG_FILE, "a") as f:
