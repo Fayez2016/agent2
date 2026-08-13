@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "docs-langchain": {
+      "serverUrl": "https://docs.langchain.com/mcp",
+      "autoApprove": true
+    },
+    "reference-langchain": {
+      "serverUrl": "https://reference.langchain.com/mcp",
+      "autoApprove": true
+    }
+  }
+}

@@ -1,0 +1,122 @@
+services:
+  ollama:
+    image: localhost/local-ollama:gemma4-12b
+    container_name: deepagent-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama:Z
+    networks:
+      - deepagent_net
+
+  aap-server:
+    build:
+      context: ./mock_aap
+      dockerfile: mock_aap.Dockerfile
+    image: deepagent_mock-aap:latest
+    container_name: deepagent-aap-server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    networks:
+      - deepagent_net
+
+  db:
+    build:
+      context: ../db
+    image: agent2_hitl-db:latest
+    container_name: deepagent-hitl-db
+    environment:
+      - POSTGRES_USER=hermes
+      - POSTGRES_PASSWORD=secret456
+      - POSTGRES_DB=hitl
+    volumes:
+      - ../db/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
+      - hitl-db-data:/var/lib/postgresql/data:Z
+    networks:
+      - deepagent_net
+    restart: unless-stopped
+
+  hitl-web:
+    build:
+      context: ../hitl_web
+    image: agent2_hitl-web:latest
+    container_name: deepagent-hitl-web
+    environment:
+      - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
+      - SECRET_KEY=hitl-secret-key-123
+    ports:
+      - "5001:5000"
+    depends_on:
+      - db
+    networks:
+      - deepagent_net
+    restart: unless-stopped
+
+  ansible-mcp:
+    build:
+      context: ..
+      dockerfile: ansible_mcp.Dockerfile
+    image: agent2_ansible-mcp:latest
+    container_name: deepagent-ansible-mcp
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - AAP_HOST=aap-server:5000
+      - AAP_TOKEN=mock-token
+      - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
+    depends_on:
+      - db
+      - aap-server
+    networks:
+      - deepagent_net
+
+  deepagent:
+    build:
+      context: .
+      dockerfile: deepagent.Dockerfile
+    image: localhost/deepagent-core:latest
+    container_name: deepagent-service
+    restart: unless-stopped
+    ports:
+      - "8642:8642"
+    environment:
+      - ANSIBLE_BACKEND_MODE=mock
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=qwen2.5:3b
+      - MCP_SERVER_URL=http://ansible-mcp:8000/mcp
+      - API_PORT=8642
+      - API_SERVER_KEY=hermes-api-secret
+    volumes:
+      - ../AGENTS.md:/home/fayez/agent2/AGENTS.md:ro
+      - ../SOUL.md:/home/fayez/agent2/SOUL.md:ro
+      - ../SOP_RHEL_FLEET_PATCHING.md:/home/fayez/agent2/SOP_RHEL_FLEET_PATCHING.md:ro
+    depends_on:
+      - ollama
+      - ansible-mcp
+    networks:
+      - deepagent_net
+
+  webui:
+    build:
+      context: .
+      dockerfile: web_ui.Dockerfile
+    image: localhost/deepagent-webui:latest
+    container_name: deepagent-webui
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - deepagent
+    networks:
+      - deepagent_net
+
+networks:
+  deepagent_net:
+    name: deepagent_standalone_net
+
+volumes:
+  hitl-db-data:
+  ollama-data:

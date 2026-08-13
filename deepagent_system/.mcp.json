@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ansible-mcp": {
+      "type": "http",
+      "url": "http://ansible-mcp:8000/mcp"
+    }
+  }
+}

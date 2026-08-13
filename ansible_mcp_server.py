@@ -34,9 +34,8 @@ def get_db_connection():
         raise RuntimeError("DATABASE_URL environment variable not set")
     return psycopg2.connect(db_url)
 
-# --- HITL MCP Tool ---
+# --- HITL Helper ---
 
-@mcp.tool()
 def hitl_request_approval(action_summary: str, action_name: str) -> str:
     """
     CRITICAL: Human-in-the-Loop authorization gate.
@@ -73,6 +72,11 @@ def hitl_request_approval(action_summary: str, action_name: str) -> str:
             time.sleep(2)
         else:
             status = 'TIMEOUT'
+            cur.execute(
+                "UPDATE hitl_requests SET status = 'TIMEOUT', resolved_at = NOW() WHERE id = %s AND status = 'PENDING'",
+                (request_id,)
+            )
+            conn.commit()
         
         logger.info(f"HITL Request {request_id} resolved/expired: {status}")
         return json.dumps({
@@ -90,12 +94,12 @@ def check_approval(action_name: str) -> bool:
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Look for a GRANTED request in the last 10 minutes that matches the action name EXACTLY
+        # Look for an unused GRANTED request created/resolved in the last 5 seconds for single-use approval
         cur.execute(
             """SELECT id FROM hitl_requests 
                WHERE status = 'GRANTED' 
                AND action_name = %s 
-               AND resolved_at > NOW() - INTERVAL '10 minutes'
+               AND resolved_at > NOW() - INTERVAL '5 seconds'
                ORDER BY resolved_at DESC LIMIT 1""",
             (action_name,)
         )
@@ -156,12 +160,22 @@ def get_job_output(job_id: int, headers: dict, aap_host: str) -> str:
     return resp.text
 
 def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any], is_high_risk: bool = False) -> str:
-    # Enforcement: Block high-risk tasks without GRANTED status in DB
+    # Enforcement: Trigger HITL authorization gate for high-risk tasks if not already GRANTED
     if is_high_risk and not check_approval(template_name):
-        return json.dumps({
-            "status": "failed",
-            "error": f"CRITICAL SECURITY VIOLATION: Execution of '{template_name}' blocked. No valid HITL approval found. You MUST call hitl_request_approval first."
-        })
+        summary = f"Executing high-risk operation '{template_name}' with parameters {json.dumps(extra_vars)}"
+        approval_json = hitl_request_approval(summary, template_name)
+        try:
+            parsed_app = json.loads(approval_json)
+            if parsed_app.get("approval") != "GRANTED":
+                return json.dumps({
+                    "status": "failed",
+                    "error": f"CRITICAL SECURITY VIOLATION: Execution of '{template_name}' blocked. HITL approval status is '{parsed_app.get('approval')}'."
+                })
+        except Exception:
+            return json.dumps({
+                "status": "failed",
+                "error": f"CRITICAL SECURITY VIOLATION: Execution of '{template_name}' blocked. Failed to parse HITL approval."
+            })
 
     aap_host = os.getenv("AAP_HOST")
     aap_token = os.getenv("AAP_TOKEN")
@@ -200,80 +214,80 @@ def ansible_get_server_info(hostlist: str) -> str:
 
 @mcp.tool()
 def ansible_pcs_node_standby(hostname: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Puts a specific cluster node in STANDBY mode to migrate resources off it."""
     return run_ansible_job_logic("PCS Node Standby", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_node_unstandby(hostname: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Takes a specific cluster node out of STANDBY mode."""
     return run_ansible_job_logic("PCS Node Unstandby", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_stop(hostname: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Stops the cluster software (Pacemaker/Corosync) on a specific node."""
     return run_ansible_job_logic("PCS Cluster Stop", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_start(hostname: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Starts the cluster software (Pacemaker/Corosync) on a specific node."""
     return run_ansible_job_logic("PCS Cluster Start", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_disable(hostname: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Disables the cluster services from starting at boot on a specific node."""
     return run_ansible_job_logic("PCS Cluster Disable", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_enable(hostname: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Enables the cluster services to start at boot on a specific node."""
     return run_ansible_job_logic("PCS Cluster Enable", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_patch_fleet(hostlist: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Apply security patches to a fleet of servers (no reboot)."""
     return run_ansible_job_logic("Patch Fleet", {"hostlist": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_reboot_fleet(hostlist: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Reboot a fleet of servers."""
     return run_ansible_job_logic("Reboot Fleet", {"hostlist": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_maintenance_mode(enable: bool) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Enable or disable global maintenance mode for the cluster."""
     mode = "true" if enable else "false"
     return run_ansible_job_logic("PCS Maintenance Mode", {"enable": mode}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_resource_move(resource_id: str, target_node: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Manually move a cluster resource to a specific node."""
     return run_ansible_job_logic("PCS Resource Move", {"resource_id": resource_id, "target_node": target_node}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_resource_clear(resource_id: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Clear temporary constraints for a cluster resource."""
     return run_ansible_job_logic("PCS Resource Clear", {"resource_id": resource_id}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_reboot_host(hostname: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Reboot a single remote host."""
     return run_ansible_job_logic("Reboot Host", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_vmware_reset(vm_name: str) -> str:
-    """CRITICAL: High-risk maintenance tool. Do not use for general admin tasks. You MUST obtain hitl_request_approval before using this.
+    """High-risk maintenance tool requiring human approval gate.
     Hard reset a VM via VMware API."""
     return run_ansible_job_logic("VMware VM Reset", {"vm_name": vm_name}, is_high_risk=True)
 
@@ -322,7 +336,7 @@ def ansible_pcs_constraint_list(hostname: str) -> str:
 @mcp.tool()
 def ansible_run_command(command: str, hostname: str) -> str:
     """Executes a shell command on a remote host via Ansible AAP. 
-    CRITICAL: High-risk maintenance tool. You MUST obtain hitl_request_approval before using this."""
+    High-risk maintenance tool requiring human approval gate."""
     return run_ansible_job_logic("Limited Run Any Command", {"hostlist": hostname, "agent_comand": command}, is_high_risk=True)
 
 if __name__ == "__main__":
