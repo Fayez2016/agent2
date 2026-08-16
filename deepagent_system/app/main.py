@@ -68,7 +68,7 @@ async def chat_completions(
             config={"recursion_limit": 10}
         )
         
-        # Extract intermediate MCP tool calls and outputs
+        # Extract intermediate tool calls, subagent delegations, and outputs
         intermediate_steps = []
         if isinstance(result, dict) and "messages" in result:
             messages = result["messages"]
@@ -78,9 +78,28 @@ async def chat_completions(
                 if tool_calls and isinstance(tool_calls, list):
                     for tc in tool_calls:
                         call_id = tc.get("id") or tc.get("name")
+                        name = tc.get("name", "")
+                        args = tc.get("args") or {}
+                        
+                        step_type = "tool"
+                        target_subagent = None
+                        subagent_prompt = None
+                        
+                        if name == "task":
+                            step_type = "subagent_delegation"
+                            target_subagent = args.get("subagent_type") or args.get("agent") or args.get("name") or "subagent"
+                            subagent_prompt = args.get("description") or args.get("prompt") or args.get("instructions") or ""
+                        elif name.startswith("ansible_"):
+                            step_type = "mcp_tool"
+                        elif name in ["write_file", "read_file", "edit_file", "list_dir", "grep_files"]:
+                            step_type = "filesystem_tool"
+
                         current_tool_calls[call_id] = {
-                            "tool_name": tc.get("name"),
-                            "tool_args": tc.get("args"),
+                            "step_type": step_type,
+                            "tool_name": name,
+                            "tool_args": args,
+                            "target_subagent": target_subagent,
+                            "subagent_task_prompt": subagent_prompt,
                             "tool_output": ""
                         }
                 elif msg.__class__.__name__ == "ToolMessage":
@@ -100,9 +119,13 @@ async def chat_completions(
                         step["tool_output"] = output_text
                         intermediate_steps.append(step)
                     else:
+                        name = getattr(msg, "name", "tool")
                         intermediate_steps.append({
-                            "tool_name": getattr(msg, "name", "mcp_tool"),
+                            "step_type": "mcp_tool" if name.startswith("ansible_") else "tool",
+                            "tool_name": name,
                             "tool_args": {},
+                            "target_subagent": None,
+                            "subagent_task_prompt": None,
                             "tool_output": output_text
                         })
 

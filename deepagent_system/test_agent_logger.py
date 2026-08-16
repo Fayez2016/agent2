@@ -111,19 +111,36 @@ def append_to_logs(entry: Dict[str, Any]):
         
         steps = entry.get("intermediate_steps", [])
         if steps:
-            f.write(f"**MCP Tool Calls & Outputs ({len(steps)} executed):**\n\n")
+            f.write(f"**Agent Actions & Intermediate Steps ({len(steps)} executed):**\n\n")
             for idx, step in enumerate(steps, 1):
-                f.write(f"#### Step {idx}: `{step.get('tool_name')}`\n")
-                f.write(f"- **Arguments:** `{json.dumps(step.get('tool_args'))}`\n")
-                f.write(f"- **Raw Tool Output:**\n```text\n{step.get('tool_output')}\n```\n\n")
+                step_type = step.get("step_type", "tool")
+                
+                if step_type == "subagent_delegation":
+                    target = step.get("target_subagent", "subagent")
+                    prompt = step.get("subagent_task_prompt", "")
+                    f.write(f"#### Step {idx}: 🤖 Subagent Delegation -> `{target}`\n")
+                    f.write(f"- **Task Prompt / Description:**\n> {prompt}\n\n")
+                    f.write(f"- **Subagent Output / Report:**\n```text\n{step.get('tool_output')}\n```\n\n")
+                elif step_type == "mcp_tool":
+                    f.write(f"#### Step {idx}: 🛠️ MCP Tool Call -> `{step.get('tool_name')}`\n")
+                    f.write(f"- **Arguments:** `{json.dumps(step.get('tool_args'))}`\n")
+                    f.write(f"- **Raw Tool Output:**\n```text\n{step.get('tool_output')}\n```\n\n")
+                elif step_type == "filesystem_tool":
+                    f.write(f"#### Step {idx}: 📁 Filesystem Operation -> `{step.get('tool_name')}`\n")
+                    f.write(f"- **Arguments:** `{json.dumps(step.get('tool_args'))}`\n")
+                    f.write(f"- **Output:**\n```text\n{step.get('tool_output')}\n```\n\n")
+                else:
+                    f.write(f"#### Step {idx}: Tool Call -> `{step.get('tool_name')}`\n")
+                    f.write(f"- **Arguments:** `{json.dumps(step.get('tool_args'))}`\n")
+                    f.write(f"- **Output:**\n```text\n{step.get('tool_output')}\n```\n\n")
         else:
-            f.write(f"**MCP Tool Calls:** None\n\n")
+            f.write(f"**Agent Intermediate Actions:** None (Direct LLM Response)\n\n")
 
-        f.write(f"**Assistant Response Summary:**\n```text\n{entry['assistant_response']}\n```\n\n")
+        f.write(f"**Assistant Final Response:**\n```text\n{entry['assistant_response']}\n```\n\n")
         
         if entry.get("db_hitl_record"):
             db = entry["db_hitl_record"]
-            f.write(f"**HITL PostgreSQL Audit DB Action:**\n")
+            f.write(f"**🛡️ HITL PostgreSQL Audit DB Action:**\n")
             f.write(f"- **Record ID:** `{db.get('id')}`\n")
             f.write(f"- **Action Name:** `{db.get('action_name')}`\n")
             f.write(f"- **Action Summary:** `{db.get('action_summary')}`\n")
@@ -131,9 +148,39 @@ def append_to_logs(entry: Dict[str, Any]):
             f.write(f"- **Requested At:** `{db.get('requested_at')}`\n")
             f.write(f"- **Resolved At:** `{db.get('resolved_at')}`\n\n")
         else:
-            f.write(f"**HITL Audit DB Action:** None (No authorization gate triggered)\n\n")
+            f.write(f"**🛡️ HITL Audit DB Action:** None (No authorization gate triggered)\n\n")
             
         f.write(f"---\n\n")
+
+def print_step_summary(steps: list):
+    """Prints a formatted summary of intermediate agent steps to the console."""
+    if not steps:
+        return
+    print(f"\n--- [Agent Behavior & Action Trace ({len(steps)} steps)] ---")
+    for idx, step in enumerate(steps, 1):
+        step_type = step.get("step_type", "tool")
+        if step_type == "subagent_delegation":
+            target = step.get("target_subagent", "subagent")
+            prompt = step.get("subagent_task_prompt", "")
+            print(f"  [Step {idx}] 🤖 SUBAGENT DELEGATION -> '{target}'")
+            print(f"    Task: {prompt[:120]}..." if len(prompt) > 120 else f"    Task: {prompt}")
+            out_preview = str(step.get('tool_output', '')).strip().replace('\n', ' ')
+            print(f"    Subagent Output: {out_preview[:160]}...")
+        elif step_type == "mcp_tool":
+            print(f"  [Step {idx}] 🛠️  MCP TOOL CALL -> '{step.get('tool_name')}'")
+            print(f"    Args: {json.dumps(step.get('tool_args'))}")
+            out_preview = str(step.get('tool_output', '')).strip().replace('\n', ' ')
+            print(f"    Tool Output: {out_preview[:160]}...")
+        elif step_type == "filesystem_tool":
+            print(f"  [Step {idx}] 📁 FILESYSTEM ACTION -> '{step.get('tool_name')}'")
+            print(f"    Args: {json.dumps(step.get('tool_args'))}")
+            out_preview = str(step.get('tool_output', '')).strip().replace('\n', ' ')
+            print(f"    Output: {out_preview[:160]}...")
+        else:
+            print(f"  [Step {idx}] ⚙️  TOOL CALL -> '{step.get('tool_name')}'")
+            print(f"    Args: {json.dumps(step.get('tool_args'))}")
+            out_preview = str(step.get('tool_output', '')).strip().replace('\n', ' ')
+            print(f"    Output: {out_preview[:160]}...")
 
 def send_agent_request(user_prompt: str, interaction_id: int, auto_approve_delay: int = 0) -> Dict[str, Any]:
     """Sends prompt to Deep Agent REST API, captures response, latency, MCP tool calls, and DB action state."""
@@ -241,12 +288,7 @@ def main():
         print(f"\n[Request] User: {args.prompt}")
         entry = send_agent_request(args.prompt, 1, auto_approve_delay=args.auto_approve)
         
-        steps = entry.get("intermediate_steps", [])
-        if steps:
-            print(f"\n--- [MCP Tool Calls & Outputs ({len(steps)})] ---")
-            for idx, step in enumerate(steps, 1):
-                print(f"  Step {idx}: Tool '{step.get('tool_name')}' | Args: {json.dumps(step.get('tool_args'))}")
-                print(f"  Tool Output: {str(step.get('tool_output'))[:160].replace(chr(10), ' ')}...")
+        print_step_summary(entry.get("intermediate_steps", []))
         
         if entry.get("db_hitl_record"):
             db = entry["db_hitl_record"]
@@ -273,12 +315,7 @@ def main():
             print(f"\nProcessing Request #{interaction_count}...")
             entry = send_agent_request(user_input, interaction_count, auto_approve_delay=args.auto_approve)
             
-            steps = entry.get("intermediate_steps", [])
-            if steps:
-                print(f"\n--- [MCP Tool Calls & Outputs ({len(steps)})] ---")
-                for idx, step in enumerate(steps, 1):
-                    print(f"  Step {idx}: Tool '{step.get('tool_name')}' | Args: {json.dumps(step.get('tool_args'))}")
-                    print(f"  Tool Output: {str(step.get('tool_output'))[:160].replace(chr(10), ' ')}...")
+            print_step_summary(entry.get("intermediate_steps", []))
             
             if entry.get("db_hitl_record"):
                 db = entry["db_hitl_record"]
