@@ -74,7 +74,7 @@ def query_db_request_by_id(request_id):
     return None
 
 def test_health_probes():
-    print("[Test 1/4] Checking Microservice Health & Connectivity Probes...")
+    print("[Test 1/5] Checking Microservice Health & Connectivity Probes...")
     success = True
     
     # Probe 1: Core REST API
@@ -105,12 +105,12 @@ def test_health_probes():
     try:
         r = requests.get(WEB_UI_URL, timeout=5)
         if r.status_code == 200:
-            print("  ✓ React Control Panel Web UI (:3000): HEALTHY")
+            print("  ✓ Web UI Control Panel Server (:3000): HEALTHY")
         else:
-            print(f"  ✗ React Control Panel Web UI returned status {r.status_code}")
+            print(f"  ✗ Web UI Control Panel returned status {r.status_code}")
             success = False
     except Exception as e:
-        print(f"  ✗ React Control Panel Web UI error: {e}")
+        print(f"  ✗ Web UI Control Panel error: {e}")
         success = False
 
     # Probe 4: Ansible MCP Bridge
@@ -127,8 +127,57 @@ def test_health_probes():
 
     return success
 
+def test_web_ui_frontend():
+    print("\n[Test 2/5] Testing Web UI Frontend & Static Asset Integrity...")
+    try:
+        # 1. Verify index.html loads with 200 OK
+        r_index = requests.get(WEB_UI_URL, timeout=5)
+        if r_index.status_code != 200:
+            print(f"  ✗ Failed to load index.html: Status {r_index.status_code}")
+            return False
+        
+        html = r_index.text
+        
+        # 2. Check DOM Structure
+        required_dom = [
+            'id="chat-messages"',
+            'id="user-input"',
+            'id="send-btn"',
+            'id="hitl-alert-banner"',
+            'id="fleet-status-panel"'
+        ]
+        missing_dom = [elem for elem in required_dom if elem not in html]
+        if missing_dom:
+            print(f"  ✗ Missing required DOM elements in index.html: {missing_dom}")
+            return False
+        print("  ✓ Web UI DOM structure verified (chat stream, input form, HITL alert banner, fleet grid).")
+
+        # 3. Check CSS and JS asset availability (Zero 404s)
+        r_css = requests.get(f"{WEB_UI_URL}/style.css", timeout=5)
+        if r_css.status_code != 200:
+            print(f"  ✗ Failed to load style.css: Status {r_css.status_code}")
+            return False
+        print("  ✓ CSS stylesheet (/style.css) verified (200 OK).")
+
+        r_js = requests.get(f"{WEB_UI_URL}/app.js", timeout=5)
+        if r_js.status_code != 200:
+            print(f"  ✗ Failed to load app.js: Status {r_js.status_code}")
+            return False
+        print("  ✓ JavaScript client (/app.js) verified (200 OK).")
+
+        # 4. Verify no uncompiled TSX tags remaining in index.html
+        if ".tsx" in html:
+            print("  ✗ Warning: index.html still contains references to unbundled .tsx files.")
+            return False
+        print("  ✓ Verified: Zero unbundled .tsx files in production HTML.")
+
+        return True
+    except Exception as e:
+        print(f"  ✗ Web UI frontend test exception: {e}")
+        return False
+
 def test_low_risk_query():
-    print("\n[Test 2/4] Testing Low-Risk Tool Invocation (ansible_pcs_health_check)...")
+    print("\n[Test 3/5] Testing Low-Risk Tool Invocation (ansible_pcs_health_check)...")
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
     payload = {
         "model": "deepagent",
@@ -159,7 +208,7 @@ def test_low_risk_query():
         return False
 
 def test_hitl_interception_and_approval():
-    print("\n[Test 3/4] Testing High-Risk HITL Gate (ansible_reboot_host)...")
+    print("\n[Test 4/5] Testing High-Risk HITL Gate (ansible_reboot_host)...")
     
     result_container = []
     status_code_container = []
@@ -248,11 +297,11 @@ def test_hitl_interception_and_approval():
         return False
 
 def test_subagent_delegation():
-    print("\n[Test 4/4] Testing Subagent Delegation (rhel-diagnostics)...")
+    print("\n[Test 5/5] Testing Subagent Delegation (rhel-diagnostics)...")
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
     payload = {
         "model": "deepagent",
-        "messages": [{"role": "user", "content": "Delegate to rhel-diagnostics subagent to inspect node health"}],
+        "messages": [{"role": "user", "content": "Delegate to rhel-diagnostics subagent to check cluster health on rhel-prod-01"}],
         "stream": False
     }
     try:
@@ -277,6 +326,10 @@ def main():
     if not test_health_probes():
         print("\n✗ Pre-flight health checks failed. Aborting verification.")
         sys.exit(1)
+
+    if not test_web_ui_frontend():
+        print("\n✗ Web UI frontend verification failed.")
+        sys.exit(1)
         
     if not test_low_risk_query():
         print("\n✗ Low-risk query verification failed.")
@@ -291,7 +344,8 @@ def main():
         sys.exit(1)
 
     print("\n==========================================================================")
-    print(" ALL TESTS PASSED SUCCESSFULLY! Deep Agent, LLM, MCP, HITL Gate & DB Verified.")
+    print(" ALL 5 TEST SUITE STAGES PASSED SUCCESSFULLY!")
+    print(" Deep Agent Core, Web UI, LLM, MCP, HITL Gate & Subagents Verified.")
     print("==========================================================================")
 
 if __name__ == "__main__":

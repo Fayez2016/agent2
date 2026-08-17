@@ -3,31 +3,154 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LangGraph Deep Agent Control Panel</title>
-    <style>
-      :root {
-        --bg-color: #0f172a;
-        --card-bg: #1e293b;
-        --accent: #38bdf8;
-        --text: #f8fafc;
-        --border: #334155;
-      }
-      body {
-        margin: 0;
-        padding: 0;
-        background-color: var(--bg-color);
-        color: var(--text);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      }
-      #root {
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
-      }
-    </style>
+    <title>LangGraph Deep Agent | Enterprise RHEL HA Control Panel</title>
+    <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div class="app-container">
+      <!-- Sidebar Panel -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="logo-area">
+            <div class="logo-icon">⚡</div>
+            <div class="logo-text">
+              <h1>Deep Agent</h1>
+              <p>LangGraph SRE Automation</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-content">
+          <!-- Quick Action Chips -->
+          <div class="sidebar-section">
+            <h3>Quick Operations</h3>
+            <div class="quick-actions-list">
+              <button class="chip-btn" data-prompt="Check the Pacemaker cluster health for host rhel-prod-01">
+                <span>🔍</span> Check Cluster Health
+              </button>
+              <button class="chip-btn" data-prompt="Delegate to the rhel-diagnostics subagent to inspect cluster health on rhel-prod-01">
+                <span>🤖</span> Run Diagnostics Subagent
+              </button>
+              <button class="chip-btn" data-prompt="Execute the full fleet patching workflow on host rhel-prod-01: check health, patch fleet, and verify cluster status.">
+                <span>📦</span> Fleet Patching Workflow
+              </button>
+              <button class="chip-btn" data-prompt="Reboot the host rhel-prod-01">
+                <span>🔄</span> Reboot Host (HITL Gate)
+              </button>
+            </div>
+          </div>
+
+          <!-- Subagents Directory -->
+          <div class="sidebar-section">
+            <h3>Active Subagents</h3>
+            <div class="subagent-badge-list">
+              <div class="subagent-item">
+                <div class="subagent-name"><span>🤖</span> rhel-diagnostics</div>
+                <div class="subagent-desc">Pre-patch node inspection, quorum checks, and cluster diagnostic summaries.</div>
+              </div>
+              <div class="subagent-item">
+                <div class="subagent-name"><span>🤖</span> fleet-patcher</div>
+                <div class="subagent-desc">DNF package management, kernel updates, and cluster verification.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RHEL Fleet Grid -->
+          <div class="sidebar-section" id="fleet-status-panel">
+            <h3>Managed Cluster Fleet (20 Nodes)</h3>
+            <div class="fleet-grid">
+              <div class="fleet-node-card"><span>rhel-prod-01</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-02</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-03</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-04</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-05</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-06</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-07</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-08</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-09</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-10</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-11</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-12</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-13</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-14</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-15</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-16</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-17</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-18</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-19</span><div class="node-dot"></div></div>
+              <div class="fleet-node-card"><span>rhel-prod-20</span><div class="node-dot"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="status-indicator">
+            <div class="status-dot"></div>
+            <span>Ansible MCP Bridge Active</span>
+          </div>
+          <span>:8000</span>
+        </div>
+      </aside>
+
+      <!-- Main Chat & Reasoning Console -->
+      <main class="main-console">
+        <header class="console-header">
+          <div class="header-title">
+            <h2>SRE Agent Orchestration Console</h2>
+          </div>
+          <div class="header-meta">
+            <span class="badge badge-gpu">NVIDIA RTX 3050 CUDA</span>
+            <span class="badge badge-model">Qwen2.5:3B</span>
+          </div>
+        </header>
+
+        <!-- HITL Security Alert Banner -->
+        <div class="hitl-alert-banner" id="hitl-alert-banner">
+          <div class="hitl-alert-content">
+            <span style="font-size: 18px;">🛡️</span>
+            <span id="hitl-banner-text">High-risk infrastructure action intercepted. Human authorization required.</span>
+          </div>
+          <a href="http://localhost:5001" target="_blank" class="hitl-portal-btn">Open Approval Portal (:5001) ➔</a>
+        </div>
+
+        <!-- Conversational Message Stream -->
+        <div class="chat-stream" id="chat-messages">
+          <div class="message-row assistant">
+            <div class="message-author">Deep Agent</div>
+            <div class="message-bubble">
+              Hello! I am your <strong>LangGraph Deep Agent</strong> for RHEL HA Enterprise Clusters.
+              <br/><br/>
+              I can orchestrate cluster health checks, delegate diagnostic tasks to specialized subagents, and execute fleet maintenance workflows with automated HITL safety gates.
+            </div>
+          </div>
+        </div>
+
+        <!-- Processing Indicator -->
+        <div style="padding: 0 24px;">
+          <div class="loading-indicator" id="loading-indicator">
+            <div class="spinner"></div>
+            <span>Deep Agent reasoning & executing tools...</span>
+          </div>
+        </div>
+
+        <!-- Input Console -->
+        <div class="console-input-area">
+          <form class="input-form" id="prompt-form">
+            <input
+              type="text"
+              id="user-input"
+              class="input-field"
+              placeholder="Enter operational command (e.g. Check Pacemaker cluster health on rhel-prod-01)..."
+              autocomplete="off"
+            />
+            <button type="submit" id="send-btn" class="send-btn">
+              Send Prompt ↵
+            </button>
+          </form>
+        </div>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
   </body>
 </html>
