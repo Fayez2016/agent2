@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LangGraph Deep Agent | Enterprise RHEL HA Control Panel</title>
+    <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
@@ -15,12 +15,21 @@
             <div class="logo-icon">⚡</div>
             <div class="logo-text">
               <h1>Deep Agent</h1>
-              <p>LangGraph SRE Automation</p>
+              <p>Autonomous SRE</p>
             </div>
           </div>
+          <button id="new-chat-btn" class="new-chat-btn"><span>+</span> New</button>
         </div>
 
         <div class="sidebar-content">
+          <!-- Conversation Sessions -->
+          <div class="sidebar-section">
+            <h3>Saved Sessions</h3>
+            <div class="threads-list" id="threads-list">
+              <!-- Dynamically populated from PostgreSQL -->
+            </div>
+          </div>
+
           <!-- Quick Action Chips -->
           <div class="sidebar-section">
             <h3>Quick Operations</h3>
@@ -35,7 +44,7 @@
                 <span>📦</span> Fleet Patching Workflow
               </button>
               <button class="chip-btn" data-prompt="Reboot the host rhel-prod-01">
-                <span>🔄</span> Reboot Host (HITL Gate)
+                <span>🔄</span> Reboot Host (High-Risk)
               </button>
             </div>
           </div>
@@ -46,39 +55,12 @@
             <div class="subagent-badge-list">
               <div class="subagent-item">
                 <div class="subagent-name"><span>🤖</span> rhel-diagnostics</div>
-                <div class="subagent-desc">Pre-patch node inspection, quorum checks, and cluster diagnostic summaries.</div>
+                <div class="subagent-desc">Pre-patch node inspection and cluster diagnostic summaries.</div>
               </div>
               <div class="subagent-item">
                 <div class="subagent-name"><span>🤖</span> fleet-patcher</div>
-                <div class="subagent-desc">DNF package management, kernel updates, and cluster verification.</div>
+                <div class="subagent-desc">DNF package management, updates, and cluster verification.</div>
               </div>
-            </div>
-          </div>
-
-          <!-- RHEL Fleet Grid -->
-          <div class="sidebar-section" id="fleet-status-panel">
-            <h3>Managed Cluster Fleet (20 Nodes)</h3>
-            <div class="fleet-grid">
-              <div class="fleet-node-card"><span>rhel-prod-01</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-02</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-03</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-04</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-05</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-06</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-07</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-08</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-09</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-10</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-11</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-12</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-13</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-14</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-15</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-16</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-17</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-18</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-19</span><div class="node-dot"></div></div>
-              <div class="fleet-node-card"><span>rhel-prod-20</span><div class="node-dot"></div></div>
             </div>
           </div>
         </div>
@@ -92,63 +74,114 @@
         </div>
       </aside>
 
-      <!-- Main Chat & Reasoning Console -->
+      <!-- Main Console -->
       <main class="main-console">
         <header class="console-header">
-          <div class="header-title">
-            <h2>SRE Agent Orchestration Console</h2>
+          <!-- View Switcher Tabs -->
+          <div class="view-tabs">
+            <button class="tab-btn active" id="tab-chat">💬 Chat & Orchestration</button>
+            <button class="tab-btn" id="tab-audit">📜 Action Audit Trail</button>
           </div>
-          <div class="header-meta">
-            <span class="badge badge-gpu">NVIDIA RTX 3050 CUDA</span>
-            <span class="badge badge-model">Qwen2.5:3B</span>
+
+          <!-- Mode Controls & Hardware Badges -->
+          <div class="header-controls">
+            <!-- HITL Mode Toggle -->
+            <div class="mode-toggle-container">
+              <span id="mode-status-text" class="mode-label">🛡️ Guardrail Mode (HITL ON)</span>
+              <label class="switch">
+                <input type="checkbox" id="hitl-mode-toggle" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 4px 8px; border-radius: 4px; font-weight: 600;">NVIDIA RTX 3050 CUDA</span>
           </div>
         </header>
 
-        <!-- HITL Security Alert Banner -->
-        <div class="hitl-alert-banner" id="hitl-alert-banner">
-          <div class="hitl-alert-content">
-            <span style="font-size: 18px;">🛡️</span>
-            <span id="hitl-banner-text">High-risk infrastructure action intercepted. Human authorization required.</span>
+        <!-- View 1: Chat Stream & Reasoning Console -->
+        <div id="chat-view" style="display: flex; flex-direction: column; flex: 1; height: calc(100vh - 65px);">
+          <div class="chat-stream" id="chat-messages">
+            <!-- Dynamically populated from PostgreSQL -->
           </div>
-          <a href="http://localhost:5001" target="_blank" class="hitl-portal-btn">Open Approval Portal (:5001) ➔</a>
-        </div>
 
-        <!-- Conversational Message Stream -->
-        <div class="chat-stream" id="chat-messages">
-          <div class="message-row assistant">
-            <div class="message-author">Deep Agent</div>
-            <div class="message-bubble">
-              Hello! I am your <strong>LangGraph Deep Agent</strong> for RHEL HA Enterprise Clusters.
-              <br/><br/>
-              I can orchestrate cluster health checks, delegate diagnostic tasks to specialized subagents, and execute fleet maintenance workflows with automated HITL safety gates.
+          <div style="padding: 0 24px;">
+            <div class="loading-indicator" id="loading-indicator">
+              <div class="spinner"></div>
+              <span>Deep Agent reasoning & executing tools...</span>
             </div>
           </div>
-        </div>
 
-        <!-- Processing Indicator -->
-        <div style="padding: 0 24px;">
-          <div class="loading-indicator" id="loading-indicator">
-            <div class="spinner"></div>
-            <span>Deep Agent reasoning & executing tools...</span>
+          <div class="console-input-area">
+            <form class="input-form" id="prompt-form">
+              <input
+                type="text"
+                id="user-input"
+                class="input-field"
+                placeholder="Enter operational instruction (e.g. Check Pacemaker cluster health on rhel-prod-01)..."
+                autocomplete="off"
+              />
+              <button type="submit" id="send-btn" class="send-btn">
+                Send Prompt ↵
+              </button>
+            </form>
           </div>
         </div>
 
-        <!-- Input Console -->
-        <div class="console-input-area">
-          <form class="input-form" id="prompt-form">
-            <input
-              type="text"
-              id="user-input"
-              class="input-field"
-              placeholder="Enter operational command (e.g. Check Pacemaker cluster health on rhel-prod-01)..."
-              autocomplete="off"
-            />
-            <button type="submit" id="send-btn" class="send-btn">
-              Send Prompt ↵
-            </button>
-          </form>
+        <!-- View 2: Action Audit Trail View -->
+        <div id="audit-view" class="audit-view-container">
+          <div class="audit-header">
+            <div>
+              <h2 style="font-size: 18px; color: #f8fafc;">PostgreSQL Action Audit Trail</h2>
+              <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Full compliance audit log of all infrastructure operations across Web UI, API endpoints, and CLI tests.</p>
+            </div>
+            <button class="refresh-btn" id="refresh-audit-btn">🔄 Refresh Audit Log</button>
+          </div>
+
+          <table class="audit-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Action Name</th>
+                <th>Target Parameters</th>
+                <th>Status</th>
+                <th>Requested At</th>
+                <th>Resolved At</th>
+              </tr>
+            </thead>
+            <tbody id="audit-table-body">
+              <!-- Dynamically populated from PostgreSQL -->
+            </tbody>
+          </table>
         </div>
       </main>
+    </div>
+
+    <!-- In-App HITL Approval Modal -->
+    <div class="modal-overlay" id="approval-modal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <span style="font-size: 20px;">🛡️</span>
+          <h3>Human-in-the-Loop Authorization Required</h3>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label>Request ID</label>
+            <p id="modal-request-id">#---</p>
+          </div>
+          <div class="modal-field">
+            <label>High-Risk Action</label>
+            <p id="modal-action-name">---</p>
+          </div>
+          <div class="modal-field">
+            <label>Parameters & Execution Details</label>
+            <p id="modal-action-summary" style="font-size: 11px;">---</p>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-deny" id="btn-modal-deny">Deny & Abort</button>
+          <button class="btn-approve" id="btn-modal-approve">Approve & Execute</button>
+        </div>
+      </div>
     </div>
 
     <script src="/app.js"></script>

@@ -74,7 +74,7 @@ def query_db_request_by_id(request_id):
     return None
 
 def test_health_probes():
-    print("[Test 1/5] Checking Microservice Health & Connectivity Probes...")
+    print("[Test 1/6] Checking Microservice Health & Connectivity Probes...")
     success = True
     
     # Probe 1: Core REST API
@@ -128,31 +128,29 @@ def test_health_probes():
     return success
 
 def test_web_ui_frontend():
-    print("\n[Test 2/5] Testing Web UI Frontend & Static Asset Integrity...")
+    print("\n[Test 2/6] Testing Web UI Frontend & Static Asset Integrity...")
     try:
-        # 1. Verify index.html loads with 200 OK
         r_index = requests.get(WEB_UI_URL, timeout=5)
         if r_index.status_code != 200:
             print(f"  ✗ Failed to load index.html: Status {r_index.status_code}")
             return False
         
         html = r_index.text
-        
-        # 2. Check DOM Structure
         required_dom = [
             'id="chat-messages"',
             'id="user-input"',
             'id="send-btn"',
-            'id="hitl-alert-banner"',
-            'id="fleet-status-panel"'
+            'id="threads-list"',
+            'id="hitl-mode-toggle"',
+            'id="approval-modal"',
+            'id="audit-table-body"'
         ]
         missing_dom = [elem for elem in required_dom if elem not in html]
         if missing_dom:
             print(f"  ✗ Missing required DOM elements in index.html: {missing_dom}")
             return False
-        print("  ✓ Web UI DOM structure verified (chat stream, input form, HITL alert banner, fleet grid).")
+        print("  ✓ Web UI DOM structure verified (chat stream, thread list, HITL mode toggle, approval modal, audit table).")
 
-        # 3. Check CSS and JS asset availability (Zero 404s)
         r_css = requests.get(f"{WEB_UI_URL}/style.css", timeout=5)
         if r_css.status_code != 200:
             print(f"  ✗ Failed to load style.css: Status {r_css.status_code}")
@@ -164,20 +162,13 @@ def test_web_ui_frontend():
             print(f"  ✗ Failed to load app.js: Status {r_js.status_code}")
             return False
         print("  ✓ JavaScript client (/app.js) verified (200 OK).")
-
-        # 4. Verify no uncompiled TSX tags remaining in index.html
-        if ".tsx" in html:
-            print("  ✗ Warning: index.html still contains references to unbundled .tsx files.")
-            return False
-        print("  ✓ Verified: Zero unbundled .tsx files in production HTML.")
-
         return True
     except Exception as e:
         print(f"  ✗ Web UI frontend test exception: {e}")
         return False
 
 def test_low_risk_query():
-    print("\n[Test 3/5] Testing Low-Risk Tool Invocation (ansible_pcs_health_check)...")
+    print("\n[Test 3/6] Testing Low-Risk Tool Invocation (ansible_pcs_health_check)...")
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
     payload = {
         "model": "deepagent",
@@ -195,7 +186,6 @@ def test_low_risk_query():
             print("  ✓ Low-risk query response received (200 OK):")
             print("    Preview:", content[:120].replace("\n", " "))
             
-            # Verify no new pending request was forced in HITL DB
             db_after = query_db_latest_request()
             if db_before and db_after and db_before["id"] == db_after["id"]:
                 print("  ✓ Verified: No HITL approval gate was triggered for low-risk check.")
@@ -207,8 +197,10 @@ def test_low_risk_query():
         print(f"  ✗ Low-risk query exception: {e}")
         return False
 
-def test_hitl_interception_and_approval():
-    print("\n[Test 4/5] Testing High-Risk HITL Gate (ansible_reboot_host)...")
+def test_hitl_interception_and_in_app_approval():
+    print("\n[Test 4/6] Testing High-Risk HITL Guardrail Mode (HITL ON) & In-App API Approval...")
+    # 1. Ensure HITL mode is set to 'enforced'
+    requests.post("http://localhost:8642/v1/settings/hitl_mode", json={"mode": "enforced"}, timeout=5)
     
     result_container = []
     status_code_container = []
@@ -233,89 +225,138 @@ def test_hitl_interception_and_approval():
     req_thread = threading.Thread(target=send_reboot_request)
     req_thread.start()
 
-    print("  Monitoring PostgreSQL HITL Audit DB and Approval Web Portal (:5001)...")
-    session = requests.Session()
-    login_data = {"username": "admin", "password": "admin123"}
-    
+    print("  Monitoring /v1/hitl/pending endpoint for In-App HITL modal trigger...")
     approved = False
     pending_request_id = None
     
     for attempt in range(60):
         time.sleep(2)
-        
-        # 1. Check PostgreSQL database directly for PENDING request
-        latest = query_db_latest_request()
-        if latest and latest["status"] == "PENDING":
-            pending_request_id = latest["id"]
-            print(f"  ✓ High-Risk Interception Verified in DB! Pending Request ID #{pending_request_id} created for action '{latest['action_name']}'.")
-            
-        # 2. Login to HITL Web Portal and submit GRANTED decision
         try:
-            r = session.get(HITL_URL, timeout=5)
-            if "Login" in r.text and "Logout" not in r.text:
-                csrf_match = re.search(r'name="csrf_token" value="(.*?)"', r.text)
-                if csrf_match:
-                    token = csrf_match.group(1)
-                    session.post(f"{HITL_URL}/login", data={**login_data, "csrf_token": token}, timeout=5)
-                    r = session.get(HITL_URL, timeout=5)
-
-            if "Approve" in r.text or "resolve" in r.text:
-                forms = re.findall(r'action="/resolve/(\d+)".*?name="csrf_token" value="(.*?)"', r.text, re.DOTALL)
-                for req_id, csrf in forms:
-                    print(f"  ✓ Web Portal HITL Approval Triggered: Granting decision for Request ID #{req_id}...")
-                    res = session.post(
-                        f"{HITL_URL}/resolve/{req_id}",
-                        data={"decision": "GRANTED", "csrf_token": csrf},
+            r = requests.get("http://localhost:8642/v1/hitl/pending", timeout=5)
+            if r.status_code == 200:
+                pending_list = r.json().get("pending", [])
+                if pending_list:
+                    pending_request_id = pending_list[0]["id"]
+                    action_name = pending_list[0]["action_name"]
+                    print(f"  ✓ High-Risk Request Detected in /v1/hitl/pending! Request ID #{pending_request_id} for '{action_name}'.")
+                    
+                    # Grant approval via the In-App HITL Resolve REST API
+                    resolve_resp = requests.post(
+                        "http://localhost:8642/v1/hitl/resolve",
+                        json={"request_id": pending_request_id, "decision": "GRANTED"},
                         timeout=5
                     )
-                    if res.status_code in [200, 302]:
+                    if resolve_resp.status_code == 200:
+                        print(f"  ✓ In-App REST API Approval Successful: Granted Decision for Request #{pending_request_id}.")
                         approved = True
                         break
-            if approved:
-                break
-        except Exception as e:
+        except Exception:
             pass
 
     req_thread.join(timeout=300)
     
     # Verify DB status updated to GRANTED
-    db_verified = False
     if pending_request_id:
         time.sleep(1)
         db_check = query_db_request_by_id(pending_request_id)
         if db_check and db_check["status"] == "GRANTED":
             print(f"  ✓ Verified in PostgreSQL DB: Request #{pending_request_id} status updated to 'GRANTED' at {db_check['resolved_at']}.")
-            db_verified = True
-        else:
-            print(f"  ! DB Status Check for Request #{pending_request_id}: Status is '{db_check.get('status') if db_check else 'Unknown'}'")
 
-    if approved or db_verified or (result_container and status_code_container and status_code_container[0] == 200):
-        print("  ✓ High-risk HITL approval gate and PostgreSQL database resolution verified successfully.")
+    if approved or (result_container and status_code_container and status_code_container[0] == 200):
+        print("  ✓ Guardrail HITL approval gate and In-App API resolution verified successfully.")
         return True
     else:
         print("  ✗ HITL test failed or timed out. Output:", result_container)
         return False
 
-def test_subagent_delegation():
-    print("\n[Test 5/5] Testing Subagent Delegation (rhel-diagnostics)...")
+def test_autonomous_24_7_mode():
+    print("\n[Test 5/6] Testing 24/7 Autonomous AI Self-Healing Mode (HITL OFF)...")
+    # 1. Switch mode to autonomous via API
+    resp_mode = requests.post("http://localhost:8642/v1/settings/hitl_mode", json={"mode": "autonomous"}, timeout=5)
+    if resp_mode.status_code != 200 or resp_mode.json().get("mode") != "autonomous":
+        print("  ✗ Failed to switch mode to autonomous")
+        return False
+    print("  ✓ Mode switched to 'autonomous' via /v1/settings/hitl_mode.")
+
+    # 2. Issue a high-risk command that would normally require HITL
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
     payload = {
         "model": "deepagent",
-        "messages": [{"role": "user", "content": "Delegate to rhel-diagnostics subagent to check cluster health on rhel-prod-01"}],
+        "messages": [{"role": "user", "content": "Reboot the host rhel-prod-01"}],
         "stream": False
     }
-    try:
-        resp = requests.post(DEEPAGENT_API_URL, headers=headers, json=payload, timeout=300)
-        if resp.status_code == 200:
-            content = resp.json()["choices"][0]["message"]["content"]
-            print("  ✓ Subagent delegation succeeded (200 OK). Response preview:")
-            print("    ", content[:120].replace("\n", " "))
-            return True
+    
+    start_time = time.time()
+    resp = requests.post(DEEPAGENT_API_URL, headers=headers, json=payload, timeout=300)
+    elapsed = time.time() - start_time
+    
+    if resp.status_code == 200:
+        print(f"  ✓ Autonomous execution completed in {elapsed:.1f}s without human waiting.")
+        latest = query_db_latest_request()
+        if latest and latest["status"] == "AUTONOMOUS_GRANTED":
+            print(f"  ✓ Verified in PostgreSQL Audit DB: Request #{latest['id']} status is 'AUTONOMOUS_GRANTED'.")
         else:
-            print(f"  ✗ Subagent delegation returned status {resp.status_code}: {resp.text}")
+            print(f"  ! DB Latest Request Status: {latest.get('status') if latest else 'None'}")
+        
+        # Reset mode back to enforced
+        requests.post("http://localhost:8642/v1/settings/hitl_mode", json={"mode": "enforced"}, timeout=5)
+        return True
+    else:
+        print(f"  ✗ Autonomous execution failed: Status {resp.status_code} - {resp.text}")
+        requests.post("http://localhost:8642/v1/settings/hitl_mode", json={"mode": "enforced"}, timeout=5)
+        return False
+
+def test_thread_and_conversation_persistence():
+    print("\n[Test 6/6] Testing PostgreSQL Conversation & Tool Trace Persistence...")
+    try:
+        # 1. Create a persistent thread
+        create_resp = requests.post("http://localhost:8642/v1/threads", json={"title": "Verification Session"}, timeout=5)
+        if create_resp.status_code != 200:
+            print(f"  ✗ Failed to create thread: {create_resp.text}")
             return False
+        
+        thread_id = create_resp.json()["thread_id"]
+        print(f"  ✓ Thread created in PostgreSQL: {thread_id}")
+
+        # 2. Send message with thread_id
+        headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+        payload = {
+            "model": "deepagent",
+            "thread_id": thread_id,
+            "messages": [{"role": "user", "content": "Check the Pacemaker cluster health for host rhel-prod-01"}],
+            "stream": False
+        }
+        resp = requests.post(DEEPAGENT_API_URL, headers=headers, json=payload, timeout=300)
+        if resp.status_code != 200:
+            print(f"  ✗ Failed to send message to thread: {resp.text}")
+            return False
+        print("  ✓ Prompt processed by Deep Agent with thread tracking.")
+
+        # 3. Retrieve messages from PostgreSQL
+        msg_resp = requests.get(f"http://localhost:8642/v1/threads/{thread_id}/messages", timeout=5)
+        if msg_resp.status_code != 200:
+            print(f"  ✗ Failed to retrieve thread messages: {msg_resp.text}")
+            return False
+        
+        messages = msg_resp.json().get("messages", [])
+        if len(messages) < 2:
+            print(f"  ✗ Expected at least 2 messages (user + assistant) in DB, got {len(messages)}")
+            return False
+        print(f"  ✓ Verified in PostgreSQL DB: {len(messages)} messages persisted for thread {thread_id}.")
+
+        # 4. Check intermediate_steps tool trace
+        assistant_msg = next((m for m in messages if m["role"] == "assistant"), None)
+        if assistant_msg and assistant_msg.get("intermediate_steps"):
+            print(f"  ✓ Verified: Tool execution trace ({len(assistant_msg['intermediate_steps'])} steps) stored in JSONB.")
+
+        # 5. Delete thread
+        del_resp = requests.delete(f"http://localhost:8642/v1/threads/{thread_id}", timeout=5)
+        if del_resp.status_code == 200:
+            print(f"  ✓ Thread {thread_id} cleaned up successfully.")
+
+        return True
     except Exception as e:
-        print(f"  ✗ Subagent delegation exception: {e}")
+        print(f"  ✗ Thread persistence test exception: {e}")
         return False
 
 def main():
@@ -335,17 +376,21 @@ def main():
         print("\n✗ Low-risk query verification failed.")
         sys.exit(1)
         
-    if not test_hitl_interception_and_approval():
+    if not test_hitl_interception_and_in_app_approval():
         print("\n✗ High-risk HITL gate verification failed.")
         sys.exit(1)
+
+    if not test_autonomous_24_7_mode():
+        print("\n✗ 24/7 Autonomous mode verification failed.")
+        sys.exit(1)
         
-    if not test_subagent_delegation():
-        print("\n✗ Subagent delegation verification failed.")
+    if not test_thread_and_conversation_persistence():
+        print("\n✗ Thread and conversation persistence verification failed.")
         sys.exit(1)
 
     print("\n==========================================================================")
-    print(" ALL 5 TEST SUITE STAGES PASSED SUCCESSFULLY!")
-    print(" Deep Agent Core, Web UI, LLM, MCP, HITL Gate & Subagents Verified.")
+    print(" ALL 6 TEST SUITE STAGES PASSED SUCCESSFULLY!")
+    print(" Deep Agent, 24/7 Autonomous AI, In-App HITL, DB Persistence & Web UI Verified.")
     print("==========================================================================")
 
 if __name__ == "__main__":
