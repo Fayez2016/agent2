@@ -1,6 +1,7 @@
 // LangGraph Deep Agent Dashboard Client
-const API_URL = "http://localhost:8642/v1/chat/completions";
-const HITL_PORTAL_URL = "http://localhost:5001";
+const API_HOST = window.location.hostname || "localhost";
+const API_URL = `${window.location.protocol}//${API_HOST}:8642/v1/chat/completions`;
+const HITL_PORTAL_URL = `${window.location.protocol}//${API_HOST}:5001`;
 const API_KEY = "hermes-api-secret";
 
 document.addEventListener("DOMContentLoaded", () => {

@@ -2,6 +2,7 @@ import logging
 import sys
 import uvicorn
 from fastapi import FastAPI, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Any, Dict
 from app.config import API_PORT, API_SERVER_KEY
@@ -11,8 +12,16 @@ from app.agent_engine import init_deep_agent
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("DeepAgentAPI")
 
-# Initialize FastAPI App
+# Initialize FastAPI App with CORS
 app = FastAPI(title="LangGraph Deep Agent Service", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Lazy-loaded agent instance
 agent_instance = None
