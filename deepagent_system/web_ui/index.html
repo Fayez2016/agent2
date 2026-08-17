@@ -26,7 +26,7 @@
           <div class="sidebar-section">
             <h3>Saved Sessions</h3>
             <div class="threads-list" id="threads-list">
-              <!-- Dynamically populated from PostgreSQL -->
+              <!-- Dynamically populated from PostgreSQL with Date-Time naming -->
             </div>
           </div>
 
@@ -101,7 +101,7 @@
         <!-- View 1: Chat Stream & Reasoning Console -->
         <div id="chat-view" style="display: flex; flex-direction: column; flex: 1; height: calc(100vh - 65px);">
           <div class="chat-stream" id="chat-messages">
-            <!-- Dynamically populated from PostgreSQL -->
+            <!-- Dynamically streamed in real-time -->
           </div>
 
           <div style="padding: 0 24px;">
@@ -154,34 +154,6 @@
           </table>
         </div>
       </main>
-    </div>
-
-    <!-- In-App HITL Approval Modal -->
-    <div class="modal-overlay" id="approval-modal">
-      <div class="modal-card">
-        <div class="modal-header">
-          <span style="font-size: 20px;">🛡️</span>
-          <h3>Human-in-the-Loop Authorization Required</h3>
-        </div>
-        <div class="modal-body">
-          <div class="modal-field">
-            <label>Request ID</label>
-            <p id="modal-request-id">#---</p>
-          </div>
-          <div class="modal-field">
-            <label>High-Risk Action</label>
-            <p id="modal-action-name">---</p>
-          </div>
-          <div class="modal-field">
-            <label>Parameters & Execution Details</label>
-            <p id="modal-action-summary" style="font-size: 11px;">---</p>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn-deny" id="btn-modal-deny">Deny & Abort</button>
-          <button class="btn-approve" id="btn-modal-approve">Approve & Execute</button>
-        </div>
-      </div>
     </div>
 
     <script src="/app.js"></script>

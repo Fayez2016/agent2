@@ -142,14 +142,13 @@ def test_web_ui_frontend():
             'id="send-btn"',
             'id="threads-list"',
             'id="hitl-mode-toggle"',
-            'id="approval-modal"',
             'id="audit-table-body"'
         ]
         missing_dom = [elem for elem in required_dom if elem not in html]
         if missing_dom:
             print(f"  ✗ Missing required DOM elements in index.html: {missing_dom}")
             return False
-        print("  ✓ Web UI DOM structure verified (chat stream, thread list, HITL mode toggle, approval modal, audit table).")
+        print("  ✓ Web UI DOM structure verified (chat stream, thread list, HITL mode toggle, in-pane stream, audit table).")
 
         r_css = requests.get(f"{WEB_UI_URL}/style.css", timeout=5)
         if r_css.status_code != 200:
