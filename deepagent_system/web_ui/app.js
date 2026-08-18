@@ -1,5 +1,5 @@
 // LangGraph Deep Agent Dashboard Client
-// Full Token Streaming (SSE), Inline In-Pane HITL, Complete Lifecycle Flow & Date-Time Auto-Naming
+// Strict Chronological Execution (Tools First, Final Response Last), Permanent HITL Cards & Incident Export
 const API_HOST = window.location.hostname || "localhost";
 const BASE_URL = `${window.location.protocol}//${API_HOST}:8642`;
 const API_KEY = "hermes-api-secret";
@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const loadingIndicator = document.getElementById("loading-indicator");
   const threadsList = document.getElementById("threads-list");
   const newChatBtn = document.getElementById("new-chat-btn");
+  const exportReportBtn = document.getElementById("export-report-btn");
   const hitlModeToggle = document.getElementById("hitl-mode-toggle");
   const modeStatusText = document.getElementById("mode-status-text");
   
@@ -27,6 +28,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const tabAudit = document.getElementById("tab-audit");
   const auditTableBody = document.getElementById("audit-table-body");
   const refreshAuditBtn = document.getElementById("refresh-audit-btn");
+
+  // Export Modal
+  const exportModal = document.getElementById("export-modal");
+  const exportPreview = document.getElementById("export-preview");
+  const closeExportModalBtn = document.getElementById("close-export-modal");
+  const downloadMdBtn = document.getElementById("download-md-btn");
+  const printReportBtn = document.getElementById("print-report-btn");
+
+  let currentExportMarkdown = "";
 
   initApp();
 
@@ -212,7 +222,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // --- Prompt Submission & SSE Token Streaming ---
+  // --- Prompt Submission & Strict Chronological Streaming ---
   inputForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const promptText = userInput.value.trim();
@@ -222,22 +232,26 @@ document.addEventListener("DOMContentLoaded", () => {
     userInput.value = "";
     setLoadingState(true);
 
-    // Create live assistant message row in the same pane
+    // Create live assistant message row with STRICT Chronological Hierarchy (Tools FIRST, Final Response LAST)
     const assistantRow = document.createElement("div");
     assistantRow.className = "message-row assistant";
     assistantRow.innerHTML = `
       <div class="message-author">Deep Agent</div>
       <div class="message-bubble">
-        <div class="stream-text-container"><span class="stream-text"></span><span class="typing-cursor"></span></div>
+        <!-- 1. Chronological Tool & Subagent Traces Appear FIRST -->
         <div class="trace-container"></div>
+        <!-- 2. Final Synthesis Text Summary Streams LAST -->
+        <div class="final-response-text">
+          <span class="stream-text"></span><span class="typing-cursor"></span>
+        </div>
       </div>
     `;
     chatStream.appendChild(assistantRow);
     scrollToBottom();
 
+    const traceContainer = assistantRow.querySelector(".trace-container");
     const streamTextEl = assistantRow.querySelector(".stream-text");
     const cursorEl = assistantRow.querySelector(".typing-cursor");
-    const traceContainer = assistantRow.querySelector(".trace-container");
 
     let fullText = "";
     let capturedSteps = [];
@@ -271,7 +285,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n\n");
-        buffer = lines.pop(); // Keep incomplete chunk in buffer
+        buffer = lines.pop();
 
         for (const line of lines) {
           const trimmed = line.trim();
@@ -288,14 +302,14 @@ document.addEventListener("DOMContentLoaded", () => {
               cursorEl.style.display = "inline-block";
             }
             
-            // Event: Intermediate Tool Step / Subagent Delegation
+            // Event: Intermediate Tool Step / Subagent Delegation (Appended Chronologically)
             else if (parsed.event === "step") {
               capturedSteps.push(parsed.step);
               renderSingleTraceCard(traceContainer, parsed.step);
               scrollToBottom();
             }
 
-            // Event: Token Stream
+            // Event: Final Response Token Stream (Rendered Below Tools)
             else if (parsed.event === "token") {
               fullText += parsed.chunk;
               streamTextEl.innerHTML = formatMarkdown(fullText);
@@ -317,7 +331,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       cursorEl.style.display = "none";
-      await loadThreads(); // Refresh thread list with date-time title
+      await loadThreads();
     } catch (err) {
       cursorEl.style.display = "none";
       streamTextEl.innerHTML = `<span style="color: #ef4444;">⚠️ Error communicating with Deep Agent API: ${escapeHtml(err.message)}</span>`;
@@ -337,6 +351,7 @@ document.addEventListener("DOMContentLoaded", () => {
     scrollToBottom();
   }
 
+  // Strict Chronological History Rendering (Tools FIRST, Synthesis LAST)
   function appendAssistantMessage(text, steps) {
     const msgRow = document.createElement("div");
     msgRow.className = "message-row assistant";
@@ -353,8 +368,10 @@ document.addEventListener("DOMContentLoaded", () => {
     msgRow.innerHTML = `
       <div class="message-author">Deep Agent</div>
       <div class="message-bubble">
-        <div>${formatMarkdown(text)}</div>
+        <!-- 1. Chronological Tool Execution Timeline FIRST -->
         ${stepsHtml}
+        <!-- 2. Final Synthesis Text Summary LAST -->
+        <div class="final-response-text">${formatMarkdown(text)}</div>
       </div>
     `;
     chatStream.appendChild(msgRow);
@@ -377,6 +394,25 @@ document.addEventListener("DOMContentLoaded", () => {
       headerTitle = `Delegation to '${step.target_subagent}'`;
     }
 
+    let hitlCardHtml = "";
+    if (step.hitl_approval) {
+      const hitl = step.hitl_approval;
+      const isGranted = hitl.status === "GRANTED" || hitl.status === "AUTONOMOUS_GRANTED";
+      hitlCardHtml = `
+        <div class="inline-hitl-card ${isGranted ? 'resolved-granted' : 'resolved-denied'}">
+          <div class="inline-hitl-header">
+            <h4><span>🛡️</span> Human Authorization Record (Request #${hitl.id})</h4>
+            <span class="status-badge ${isGranted ? 'status-granted' : 'status-denied'}">${hitl.status}</span>
+          </div>
+          <div class="inline-hitl-body">
+            <div><strong>Authorized Action:</strong> <code>${escapeHtml(hitl.action_name)}</code></div>
+            <div><strong>Parameters:</strong> <code>${escapeHtml(hitl.action_summary)}</code></div>
+            <div style="font-size: 11px; color: #94a3b8;">Timestamp: ${hitl.resolved_at || hitl.requested_at || 'Recorded'}</div>
+          </div>
+        </div>
+      `;
+    }
+
     let bodyContent = "";
     if (step.subagent_task_prompt) {
       bodyContent += `Task: ${escapeHtml(step.subagent_task_prompt)}\n\n`;
@@ -387,16 +423,19 @@ document.addEventListener("DOMContentLoaded", () => {
     bodyContent += `Output:\n${escapeHtml(step.tool_output || 'No output recorded')}`;
 
     return `
-      <div class="trace-card">
-        <div class="trace-header" onclick="this.parentElement.querySelector('.trace-body').classList.toggle('hidden')">
-          <div class="trace-title">
-            <span class="trace-type-badge ${badgeClass}">${badgeLabel}</span>
-            <span>${headerTitle}</span>
+      <div>
+        ${hitlCardHtml}
+        <div class="trace-card">
+          <div class="trace-header" onclick="this.parentElement.querySelector('.trace-body').classList.toggle('hidden')">
+            <div class="trace-title">
+              <span class="trace-type-badge ${badgeClass}">${badgeLabel}</span>
+              <span>${headerTitle}</span>
+            </div>
+            <span style="font-size: 11px; color: #94a3b8;">Click to toggle details ▼</span>
           </div>
-          <span style="font-size: 11px; color: #94a3b8;">Click to toggle details ▼</span>
-        </div>
-        <div class="trace-body">
-          <pre class="trace-code">${bodyContent}</pre>
+          <div class="trace-body">
+            <pre class="trace-code">${bodyContent}</pre>
+          </div>
         </div>
       </div>
     `;
@@ -414,7 +453,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (pending.length > 0) {
           const req = pending[0];
           activePendingRequestId = req.id;
-          renderInlineHitlCard(req);
+          renderPendingInlineHitlCard(req);
         }
       } catch (e) {
         // quiet poll
@@ -422,11 +461,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 2000);
   }
 
-  function renderInlineHitlCard(req) {
+  function renderPendingInlineHitlCard(req) {
     const existing = document.getElementById(`inline-hitl-${req.id}`);
-    if (existing) return; // Already rendered in current pane
+    if (existing) return;
 
-    const lastAssistantRow = chatStream.querySelector(".message-row.assistant:last-child .message-bubble");
+    const lastAssistantRow = chatStream.querySelector(".message-row.assistant:last-child .message-bubble .trace-container");
     if (!lastAssistantRow) return;
 
     const hitlCard = document.createElement("div");
@@ -465,6 +504,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const card = document.getElementById(`inline-hitl-${requestId}`);
       if (card) {
         const isGranted = decision === "GRANTED";
+        card.className = `inline-hitl-card ${isGranted ? 'resolved-granted' : 'resolved-denied'}`;
         card.querySelector(".inline-hitl-actions").innerHTML = `
           <span class="inline-resolved-badge ${isGranted ? 'status-granted' : 'status-denied'}">
             ${isGranted ? '✓ Action Authorized by Operator' : '✗ Action Denied by Operator'}
@@ -477,6 +517,60 @@ document.addEventListener("DOMContentLoaded", () => {
       alert("Error resolving HITL request: " + e.message);
     }
   };
+
+  // --- Session Export & Reporting ---
+  exportReportBtn.addEventListener("click", async () => {
+    if (!currentThreadId) {
+      alert("Please select or start a session first.");
+      return;
+    }
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/threads/${currentThreadId}/export`);
+      const data = await resp.json();
+      currentExportMarkdown = data.markdown || "No report content generated.";
+      exportPreview.textContent = currentExportMarkdown;
+      exportModal.style.display = "flex";
+    } catch (e) {
+      alert("Failed to export session: " + e.message);
+    }
+  });
+
+  closeExportModalBtn.addEventListener("click", () => {
+    exportModal.style.display = "none";
+  });
+
+  downloadMdBtn.addEventListener("click", () => {
+    const blob = new Blob([currentExportMarkdown], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `incident_report_${currentThreadId}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  printReportBtn.addEventListener("click", () => {
+    const printWindow = window.open("", "_blank");
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Deep Agent SRE Report</title>
+          <style>
+            body { font-family: -apple-system, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; }
+            pre { background: #f1f5f9; padding: 12px; border-radius: 6px; overflow-x: auto; }
+            code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
+            h1, h2, h3 { color: #0f172a; }
+            hr { border: none; border-top: 1px solid #cbd5e1; margin: 20px 0; }
+          </style>
+        </head>
+        <body>
+          <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHtml(currentExportMarkdown)}</pre>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  });
 
   // --- Audit History View ---
   async function loadAuditHistory() {

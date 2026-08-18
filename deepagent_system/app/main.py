@@ -182,6 +182,96 @@ def delete_thread(thread_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def enrich_step_with_hitl(step: dict) -> dict:
+    name = step.get("tool_name", "")
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """SELECT id, action_name, action_summary, status, requested_at, resolved_at 
+               FROM hitl_requests 
+               WHERE (action_name = %s OR action_summary ILIKE %s)
+               AND resolved_at > NOW() - INTERVAL '15 minutes'
+               ORDER BY id DESC LIMIT 1;""",
+            (name, f"%{name}%")
+        )
+        row = cur.fetchone()
+        if row:
+            step["hitl_approval"] = dict(row)
+        cur.close()
+        conn.close()
+    except Exception:
+        pass
+    return step
+
+@app.get("/v1/threads/{thread_id}/export")
+def export_thread_report(thread_id: str):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT thread_id, title, created_at, updated_at FROM conversation_threads WHERE thread_id = %s;", (thread_id,))
+        thread_row = cur.fetchone()
+        if not thread_row:
+            raise HTTPException(status_code=404, detail="Thread not found")
+        
+        cur.execute("SELECT id, role, content, intermediate_steps, created_at FROM conversation_messages WHERE thread_id = %s ORDER BY id ASC;", (thread_id,))
+        msg_rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        report_lines = []
+        report_lines.append(f"# Deep Agent SRE Incident & Execution Report")
+        report_lines.append(f"**Session ID:** `{thread_id}`  ")
+        report_lines.append(f"**Session Title:** {thread_row['title']}  ")
+        report_lines.append(f"**Generated:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}  ")
+        report_lines.append(f"**Cluster Environment:** Red Hat Enterprise Linux HA Fleet (20 Nodes)")
+        report_lines.append(f"\n---\n")
+        report_lines.append(f"## Chronological Execution Timeline\n")
+        
+        step_idx = 1
+        for msg in msg_rows:
+            role = msg['role'].upper()
+            time_str = msg['created_at'].strftime('%Y-%m-%d %H:%M:%S') if msg['created_at'] else 'N/A'
+            if role == 'USER':
+                report_lines.append(f"### 👤 Step {step_idx}: Operator Request ({time_str})")
+                report_lines.append(f"> {msg['content']}\n")
+                step_idx += 1
+            else:
+                steps = msg.get('intermediate_steps') or []
+                if isinstance(steps, str):
+                    try:
+                        steps = json.loads(steps)
+                    except Exception:
+                        steps = []
+                
+                if steps:
+                    report_lines.append(f"#### ⚙️ FastMCP Tools & Subagent Execution Timeline")
+                    for s in steps:
+                        t_name = s.get('tool_name', 'tool')
+                        s_type = s.get('step_type', 'tool')
+                        hitl = s.get('hitl_approval')
+                        if hitl:
+                            report_lines.append(f"- 🛡️ **HITL Authorization:** Request #{hitl['id']} `{hitl['action_name']}` -> **Status: {hitl['status']}** at {hitl.get('resolved_at')}")
+                        if s_type == 'subagent_delegation':
+                            report_lines.append(f"- 🤖 **Subagent Delegation:** `{s.get('target_subagent')}` (Task: {s.get('subagent_task_prompt')})")
+                        else:
+                            report_lines.append(f"- 🛠️ **Tool Invocation:** `{t_name}`")
+                            if s.get('tool_args'):
+                                report_lines.append(f"  - **Arguments:** `{json.dumps(s.get('tool_args'))}`")
+                        if s.get('tool_output'):
+                            clean_out = s.get('tool_output')[:500]
+                            report_lines.append(f"  ```\n  {clean_out}\n  ```")
+                
+                report_lines.append(f"\n### 🤖 Step {step_idx}: Deep Agent Final Synthesis ({time_str})")
+                report_lines.append(f"{msg['content']}\n")
+                step_idx += 1
+        
+        report_lines.append(f"\n---\n*Report compiled autonomously by LangGraph Deep Agent SRE System.*")
+        markdown_text = "\n".join(report_lines)
+        return {"status": "ok", "thread_id": thread_id, "markdown": markdown_text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # --- In-App HITL Management Endpoints ---
 
 @app.get("/v1/hitl/pending")
@@ -367,11 +457,13 @@ async def chat_completions(
                             if tool_call_id and tool_call_id in current_tool_calls:
                                 step = current_tool_calls.pop(tool_call_id)
                                 step["tool_output"] = output_text
+                                step = enrich_step_with_hitl(step)
                                 intermediate_steps.append(step)
                                 yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
                             elif current_tool_calls:
                                 _, step = current_tool_calls.popitem()
                                 step["tool_output"] = output_text
+                                step = enrich_step_with_hitl(step)
                                 intermediate_steps.append(step)
                                 yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
                             else:
@@ -384,6 +476,7 @@ async def chat_completions(
                                     "subagent_task_prompt": None,
                                     "tool_output": output_text
                                 }
+                                step = enrich_step_with_hitl(step)
                                 intermediate_steps.append(step)
                                 yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
 
@@ -508,21 +601,25 @@ async def chat_completions(
                     if tool_call_id and tool_call_id in current_tool_calls:
                         step = current_tool_calls.pop(tool_call_id)
                         step["tool_output"] = output_text
+                        step = enrich_step_with_hitl(step)
                         intermediate_steps.append(step)
                     elif current_tool_calls:
                         _, step = current_tool_calls.popitem()
                         step["tool_output"] = output_text
+                        step = enrich_step_with_hitl(step)
                         intermediate_steps.append(step)
                     else:
                         name = getattr(msg, "name", "tool")
-                        intermediate_steps.append({
+                        step = {
                             "step_type": "mcp_tool" if name.startswith("ansible_") else "tool",
                             "tool_name": name,
                             "tool_args": {},
                             "target_subagent": None,
                             "subagent_task_prompt": None,
                             "tool_output": output_text
-                        })
+                        }
+                        step = enrich_step_with_hitl(step)
+                        intermediate_steps.append(step)
 
         # Extract assistant response from result
         response_text = ""
