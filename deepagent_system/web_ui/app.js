@@ -130,7 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
     appendAssistantMessage("Hello! I am your **LangGraph Deep Agent**. Ready to execute infrastructure tasks.", []);
   }
 
-  async function loadThreads() {
+  async function loadThreads(reloadChat = true) {
     try {
       const resp = await fetch(`${BASE_URL}/v1/threads`);
       const data = await resp.json();
@@ -163,7 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
         threadsList.appendChild(item);
       });
 
-      if (currentThreadId) {
+      if (reloadChat && currentThreadId) {
         await loadThreadMessages(currentThreadId);
       }
     } catch (e) {
@@ -174,7 +174,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function switchThread(threadId) {
     currentThreadId = threadId;
     document.querySelectorAll(".thread-item").forEach((el) => el.classList.remove("active"));
-    await loadThreads();
+    await loadThreads(true);
   }
 
   async function deleteThread(threadId) {
@@ -331,7 +331,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       cursorEl.style.display = "none";
-      await loadThreads();
+      await loadThreads(false);
     } catch (err) {
       cursorEl.style.display = "none";
       streamTextEl.innerHTML = `<span style="color: #ef4444;">⚠️ Error communicating with Deep Agent API: ${escapeHtml(err.message)}</span>`;
@@ -379,6 +379,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderSingleTraceCard(container, step) {
+    if (step.hitl_approval && step.hitl_approval.id) {
+      const tempCard = document.getElementById(`inline-hitl-${step.hitl_approval.id}`);
+      if (tempCard) {
+        tempCard.remove();
+      }
+    }
     const temp = document.createElement("div");
     temp.innerHTML = generateTraceCardHtml(step);
     container.appendChild(temp.firstElementChild);

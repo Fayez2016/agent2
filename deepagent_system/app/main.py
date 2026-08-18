@@ -182,26 +182,50 @@ def delete_thread(thread_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+TOOL_TO_ACTION_NAME = {
+    "ansible_reboot_host": "Reboot Host",
+    "ansible_patch_fleet": "Patch Fleet",
+    "ansible_pcs_node_standby": "PCS Node Standby",
+    "ansible_pcs_node_unstandby": "PCS Node Unstandby",
+    "ansible_pcs_cluster_stop": "PCS Cluster Stop",
+    "ansible_pcs_cluster_start": "PCS Cluster Start",
+    "ansible_pcs_cluster_disable": "PCS Cluster Disable",
+    "ansible_pcs_cluster_enable": "PCS Cluster Enable",
+    "ansible_pcs_maintenance_mode": "PCS Maintenance Mode",
+    "ansible_pcs_resource_move": "PCS Resource Move",
+    "ansible_pcs_resource_clear": "PCS Resource Clear",
+    "ansible_vmware_vm_reset": "VMware VM Reset",
+    "ansible_run_command": "Limited Run Any Command"
+}
+
 def enrich_step_with_hitl(step: dict) -> dict:
     name = step.get("tool_name", "")
+    action_name = TOOL_TO_ACTION_NAME.get(name, name)
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
             """SELECT id, action_name, action_summary, status, requested_at, resolved_at 
                FROM hitl_requests 
-               WHERE (action_name = %s OR action_summary ILIKE %s)
-               AND resolved_at > NOW() - INTERVAL '15 minutes'
+               WHERE (action_name = %s OR action_name = %s OR action_summary ILIKE %s)
+               AND resolved_at > NOW() - INTERVAL '30 minutes'
                ORDER BY id DESC LIMIT 1;""",
-            (name, f"%{name}%")
+            (action_name, name, f"%{action_name}%")
         )
         row = cur.fetchone()
         if row:
-            step["hitl_approval"] = dict(row)
+            step["hitl_approval"] = {
+                "id": row["id"],
+                "action_name": row["action_name"],
+                "action_summary": row["action_summary"],
+                "status": row["status"],
+                "requested_at": str(row["requested_at"]) if row.get("requested_at") else None,
+                "resolved_at": str(row["resolved_at"]) if row.get("resolved_at") else None
+            }
         cur.close()
         conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to enrich step with hitl: {e}")
     return step
 
 @app.get("/v1/threads/{thread_id}/export")
