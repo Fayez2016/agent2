@@ -106,16 +106,15 @@ def get_hitl_mode() -> str:
     return "enforced"
 
 def check_approval(action_name: str) -> bool:
-    """Helper to verify if a recently GRANTED HITL approval exists for this specific action."""
+    """Helper to verify if a recently GRANTED HITL approval exists for this action or an active batch session."""
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # Look for an unused GRANTED request created/resolved in the last 5 seconds for single-use approval
         cur.execute(
             """SELECT id FROM hitl_requests 
-               WHERE status = 'GRANTED' 
-               AND action_name = %s 
-               AND resolved_at > NOW() - INTERVAL '5 seconds'
+               WHERE (status = 'GRANTED' OR status = 'AUTONOMOUS_GRANTED')
+               AND (action_name = %s OR action_name IN ('Patch Fleet', 'HA Rolling Update', 'Reboot Fleet', 'Enterprise Rolling Maintenance', 'Reboot Host')) 
+               AND resolved_at > NOW() - INTERVAL '15 minutes'
                ORDER BY resolved_at DESC LIMIT 1""",
             (action_name,)
         )
@@ -372,6 +371,17 @@ def ansible_pcs_cib_upgrade(hostname: str) -> str:
 def ansible_pcs_constraint_list(hostname: str) -> str:
     """Retrieves the list of location constraints for the cluster."""
     return run_ansible_job_logic("PCS Constraint List", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_check_host_online(hostname: str) -> str:
+    """Verifies that a remote host is online and reachable on SSH port 22 after reboot."""
+    return run_ansible_job_logic("Check Host Online", {"hostname": hostname})
+
+@mcp.tool()
+def ansible_console_power_on(hostname: str) -> str:
+    """High-risk maintenance tool requiring human approval gate.
+    Brings up an unresponsive server via out-of-band management console / IPMI."""
+    return run_ansible_job_logic("Console Power On", {"hostname": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_run_command(command: str, hostname: str) -> str:

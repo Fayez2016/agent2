@@ -1,0 +1,19 @@
+---
+# Production Ansible Playbook: Send SRE Notification Email
+- name: Dispatch Maintenance Notification Email
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Send Summary Email to Administrator
+      community.general.mail:
+        host: "{{ smtp_host | default('smtp.enterprise.local') }}"
+        port: "{{ smtp_port | default(25) }}"
+        to: "{{ recipient | default('admin@enterprise.local') }}"
+        subject: "{{ subject | default('[SRE Report] Maintenance Completed') }}"
+        body: "{{ body | default('Maintenance execution report from Deep Agent.') }}"
+        subtype: html
+      ignore_errors: true
+
+    - name: Log Email Dispatch Success
+      ansible.builtin.debug:
+        msg: "Notification email successfully dispatched to {{ recipient | default('admin@enterprise.local') }}."

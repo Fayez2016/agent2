@@ -35,9 +35,14 @@ async def init_deep_agent():
                 "system_prompt": "You are a RHEL Cluster Diagnostic Subagent. Run checks and return a concise summary."
             },
             {
+                "name": "ha-cluster-patcher",
+                "description": "Specialized subagent for executing Red Hat Enterprise Linux High Availability (HA) Pacemaker/Corosync cluster rolling updates per Red Hat SOP (Article 2059253) across single and multi-cluster fleets.",
+                "system_prompt": "You are the Red Hat HA Cluster Rolling Maintenance Subagent following SOP 2059253. For each cluster node: 1. Combine Pre-check & Evacuation (check health and standby node). 2. Patch node. 3. Reboot node. 4. Verify host online (if unresponsive, trigger out-of-band console power-on / VM reset). 5. Reintegrate node (unstandby). 6. Repeat across all nodes in the batch. 7. Generate a comprehensive per-cluster reboot matrix report and dispatch it via ansible_send_email to admin@enterprise.local."
+            },
+            {
                 "name": "fleet-patcher",
-                "description": "Specialized subagent for applying DNF updates and cluster node patching",
-                "system_prompt": "You are a RHEL Fleet Patching Subagent. Apply patch updates via Ansible and verify service restoration."
+                "description": "Specialized subagent for applying DNF updates, executing managed reboots, verifying host uptime, and recovering unreachable hosts via console power-on across enterprise server fleets.",
+                "system_prompt": "You are the Enterprise Fleet Patching Subagent. 1. Apply package updates across the hostlist. 2. Execute managed reboots. 3. Verify hosts reach online state (if unresponsive, trigger console power-on or VM reset). 4. Dispatch the final execution summary to admin@enterprise.local via ansible_send_email."
             }
         ]
     )

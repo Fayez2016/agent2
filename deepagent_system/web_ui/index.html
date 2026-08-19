@@ -34,17 +34,17 @@
           <div class="sidebar-section">
             <h3>Quick Operations</h3>
             <div class="quick-actions-list">
+              <button class="chip-btn" data-prompt="Using ha-cluster-patcher subagent, execute the Red Hat HA Rolling Update (SOP 2059253) across 10 HA clusters (ha-cluster-01 to ha-cluster-10). Combine pre-check and standby, apply patches, reboot with console recovery if needed, unstandby, and email the final report to admin@enterprise.local.">
+                <span>🔄</span> HA Rolling Update (10 Clusters)
+              </button>
+              <button class="chip-btn" data-prompt="Using fleet-patcher subagent, execute fleet patching on hosts rhel-prod-01 to rhel-prod-10: patch, reboot, verify online with console recovery if needed, and email report.">
+                <span>📦</span> Fleet Patching (10 Hosts)
+              </button>
               <button class="chip-btn" data-prompt="Check the Pacemaker cluster health for host rhel-prod-01">
                 <span>🔍</span> Check Cluster Health
               </button>
               <button class="chip-btn" data-prompt="Delegate to the rhel-diagnostics subagent to inspect cluster health on rhel-prod-01">
                 <span>🤖</span> Run Diagnostics Subagent
-              </button>
-              <button class="chip-btn" data-prompt="Execute the full fleet patching workflow on host rhel-prod-01: check health, patch fleet, and verify cluster status.">
-                <span>📦</span> Fleet Patching Workflow
-              </button>
-              <button class="chip-btn" data-prompt="Reboot the host rhel-prod-01">
-                <span>🔄</span> Reboot Host (High-Risk)
               </button>
             </div>
           </div>
@@ -54,12 +54,16 @@
             <h3>Active Subagents</h3>
             <div class="subagent-badge-list">
               <div class="subagent-item">
-                <div class="subagent-name"><span>🤖</span> rhel-diagnostics</div>
-                <div class="subagent-desc">Pre-patch node inspection and cluster diagnostic summaries.</div>
+                <div class="subagent-name"><span>🤖</span> ha-cluster-patcher</div>
+                <div class="subagent-desc">Zero-downtime Red Hat HA rolling updates per SOP 2059253 with reboot matrix and email reporting.</div>
               </div>
               <div class="subagent-item">
                 <div class="subagent-name"><span>🤖</span> fleet-patcher</div>
-                <div class="subagent-desc">DNF package management, updates, and cluster verification.</div>
+                <div class="subagent-desc">Enterprise DNF package updates, managed reboots, uptime verification, and console recovery.</div>
+              </div>
+              <div class="subagent-item">
+                <div class="subagent-name"><span>🤖</span> rhel-diagnostics</div>
+                <div class="subagent-desc">Pre-patch node inspection and cluster diagnostic summaries.</div>
               </div>
             </div>
           </div>

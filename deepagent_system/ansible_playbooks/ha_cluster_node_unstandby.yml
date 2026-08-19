@@ -1,0 +1,29 @@
+---
+# Production Ansible Playbook: RHEL HA Node Unstandby (Reintegration)
+# Takes the target node out of STANDBY mode and verifies cluster quorum restoration.
+- name: Reintegrate Node by Clearing Standby Status
+  hosts: "{{ hostname | default(inventory_hostname) }}"
+  gather_facts: false
+  tasks:
+    - name: Clear Node Standby Status
+      ansible.builtin.command: pcs node unstandby {{ inventory_hostname }}
+      register: unstandby_result
+      changed_when: unstandby_result.rc == 0
+
+    - name: Clean up Any Transient Resource Failures
+      ansible.builtin.command: pcs resource cleanup
+      register: cleanup_result
+      changed_when: cleanup_result.rc == 0
+      failed_when: false
+
+    - name: Verify Node is Online and Quorate
+      ansible.builtin.command: pcs status
+      register: final_pcs_status
+      until: "'Online:' in final_pcs_status.stdout and inventory_hostname in final_pcs_status.stdout"
+      retries: 6
+      delay: 5
+      changed_when: false
+
+    - name: Report Node Unstandby Success
+      ansible.builtin.debug:
+        msg: "Node {{ inventory_hostname }} taken out of STANDBY mode and successfully reintegrated into cluster."

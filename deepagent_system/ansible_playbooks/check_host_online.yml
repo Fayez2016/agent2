@@ -1,0 +1,18 @@
+---
+# Production Ansible Playbook: Check Host Online and SSH Verification
+- name: Verify Host Accessibility and SSH Port 22
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Test TCP Connection on Port 22
+      ansible.builtin.wait_for:
+        host: "{{ target_host | default(hostname) }}"
+        port: 22
+        state: started
+        timeout: "{{ timeout | default(45) }}"
+      register: port_check
+      ignore_errors: true
+
+    - name: Report Online Status
+      ansible.builtin.debug:
+        msg: "Host {{ target_host | default(hostname) }} is {{ 'ONLINE (Port 22 Reachable)' if port_check.failed is not defined or not port_check.failed else 'OFFLINE / UNRESPONSIVE' }}."

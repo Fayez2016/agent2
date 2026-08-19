@@ -185,6 +185,7 @@ def delete_thread(thread_id: str):
 TOOL_TO_ACTION_NAME = {
     "ansible_reboot_host": "Reboot Host",
     "ansible_patch_fleet": "Patch Fleet",
+    "ansible_reboot_fleet": "Reboot Fleet",
     "ansible_pcs_node_standby": "PCS Node Standby",
     "ansible_pcs_node_unstandby": "PCS Node Unstandby",
     "ansible_pcs_cluster_stop": "PCS Cluster Stop",
@@ -195,6 +196,8 @@ TOOL_TO_ACTION_NAME = {
     "ansible_pcs_resource_move": "PCS Resource Move",
     "ansible_pcs_resource_clear": "PCS Resource Clear",
     "ansible_vmware_vm_reset": "VMware VM Reset",
+    "ansible_vmware_reset": "VMware VM Reset",
+    "ansible_console_power_on": "Console Power On",
     "ansible_run_command": "Limited Run Any Command"
 }
 

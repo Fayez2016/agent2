@@ -1,0 +1,17 @@
+---
+# Production Ansible Playbook: Fleet Managed Host Reboot
+- name: Managed System Reboot
+  hosts: "{{ hostlist | default(hostname | default('all')) }}"
+  gather_facts: false
+  tasks:
+    - name: Issue System Reboot
+      ansible.builtin.reboot:
+        reboot_timeout: "{{ reboot_timeout | default(300) }}"
+        pre_reboot_delay: 2
+        post_reboot_delay: 10
+        test_command: uptime
+      register: reboot_out
+
+    - name: Report Reboot Success
+      ansible.builtin.debug:
+        msg: "Host {{ inventory_hostname }} rebooted successfully. Elapsed: {{ reboot_out.elapsed | default(30) }} seconds."

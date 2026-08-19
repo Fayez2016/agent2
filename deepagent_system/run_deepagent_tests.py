@@ -358,6 +358,24 @@ def test_thread_and_conversation_persistence():
         print(f"  ✗ Thread persistence test exception: {e}")
         return False
 
+def test_ha_rolling_update_sop_stage():
+    print("\n[Test 7/8] Testing Red Hat HA Rolling Update (SOP 2059253 - 10 Clusters & Email)...")
+    try:
+        from tests.test_ha_rolling_update_scenarios import test_ha_rolling_update_scenario
+        return test_ha_rolling_update_scenario()
+    except Exception as e:
+        print(f"  ✗ HA Rolling Update test exception: {e}")
+        return False
+
+def test_fleet_patching_stage():
+    print("\n[Test 8/8] Testing Enterprise Fleet Patching & Console Recovery...")
+    try:
+        from tests.test_fleet_patching_scenarios import test_fleet_patching_scenario
+        return test_fleet_patching_scenario()
+    except Exception as e:
+        print(f"  ✗ Fleet Patching test exception: {e}")
+        return False
+
 def main():
     print("==========================================================================")
     print(" Deep Agent Comprehensive End-to-End Verification Test Suite")
@@ -387,9 +405,17 @@ def main():
         print("\n✗ Thread and conversation persistence verification failed.")
         sys.exit(1)
 
+    if not test_ha_rolling_update_sop_stage():
+        print("\n✗ HA Rolling Update SOP 2059253 stage failed.")
+        sys.exit(1)
+
+    if not test_fleet_patching_stage():
+        print("\n✗ Enterprise Fleet Patching stage failed.")
+        sys.exit(1)
+
     print("\n==========================================================================")
-    print(" ALL 6 TEST SUITE STAGES PASSED SUCCESSFULLY!")
-    print(" Deep Agent, 24/7 Autonomous AI, In-App HITL, DB Persistence & Web UI Verified.")
+    print(" ALL 8 TEST SUITE STAGES PASSED SUCCESSFULLY!")
+    print(" Deep Agent, HA SOP 2059253, Fleet Patcher, Email & Web UI Verified.")
     print("==========================================================================")
 
 if __name__ == "__main__":

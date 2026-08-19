@@ -1,0 +1,23 @@
+---
+# Production Ansible Playbook: RHEL HA Node Standby (Resource Evacuation)
+# Places the target node into STANDBY mode and monitors resource migration to peers.
+- name: Evacuate Resources by Putting Node in Standby
+  hosts: "{{ hostname | default(inventory_hostname) }}"
+  gather_facts: false
+  tasks:
+    - name: Put Node in Standby Mode
+      ansible.builtin.command: pcs node standby {{ inventory_hostname }}
+      register: standby_result
+      changed_when: standby_result.rc == 0
+
+    - name: Wait for Cluster Resources to Migrate to Peer Nodes
+      ansible.builtin.command: pcs status --xml
+      register: pcs_xml_status
+      until: "inventory_hostname not in pcs_xml_status.stdout or 'standby' in pcs_xml_status.stdout"
+      retries: 6
+      delay: 5
+      changed_when: false
+
+    - name: Report Node Standby Success
+      ansible.builtin.debug:
+        msg: "Node {{ inventory_hostname }} put in STANDBY mode. Resources migrated successfully."
