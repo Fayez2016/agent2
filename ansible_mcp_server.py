@@ -112,8 +112,8 @@ def check_approval(action_name: str) -> bool:
     try:
         cur.execute(
             """SELECT id FROM hitl_requests 
-               WHERE (status = 'GRANTED' OR status = 'AUTONOMOUS_GRANTED')
-               AND (action_name = %s OR action_name IN ('Patch Fleet', 'HA Rolling Update', 'Reboot Fleet', 'Enterprise Rolling Maintenance', 'Reboot Host')) 
+               WHERE status = 'GRANTED'
+               AND (action_name = %s OR action_name IN ('Patch Fleet', 'HA Rolling Update', 'Reboot Fleet', 'Enterprise Rolling Maintenance', 'Reboot Host', 'PCS Node Standby')) 
                AND resolved_at > NOW() - INTERVAL '15 minutes'
                ORDER BY resolved_at DESC LIMIT 1""",
             (action_name,)
@@ -244,7 +244,7 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any], is_hig
     except Exception as e:
         return json.dumps({"error": str(e)})
 
-# --- Tool Definitions ---
+# --- Batch-Ready Tool Definitions (Accepts hostlist / comma-separated lists) ---
 
 @mcp.tool()
 def ansible_get_server_info(hostlist: str) -> str:
@@ -252,16 +252,16 @@ def ansible_get_server_info(hostlist: str) -> str:
     return run_ansible_job_logic("Get Server Info", {"hostlist": hostlist})
 
 @mcp.tool()
-def ansible_pcs_node_standby(hostname: str) -> str:
+def ansible_pcs_node_standby(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
-    Puts a specific cluster node in STANDBY mode to migrate resources off it."""
-    return run_ansible_job_logic("PCS Node Standby", {"hostname": hostname}, is_high_risk=True)
+    Puts a specific cluster node or list of cluster nodes in STANDBY mode to migrate resources off."""
+    return run_ansible_job_logic("PCS Node Standby", {"hostlist": hostlist}, is_high_risk=True)
 
 @mcp.tool()
-def ansible_pcs_node_unstandby(hostname: str) -> str:
+def ansible_pcs_node_unstandby(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
-    Takes a specific cluster node out of STANDBY mode."""
-    return run_ansible_job_logic("PCS Node Unstandby", {"hostname": hostname}, is_high_risk=True)
+    Takes a specific cluster node or list of cluster nodes out of STANDBY mode."""
+    return run_ansible_job_logic("PCS Node Unstandby", {"hostlist": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_stop(hostname: str) -> str:
@@ -290,13 +290,13 @@ def ansible_pcs_cluster_enable(hostname: str) -> str:
 @mcp.tool()
 def ansible_patch_fleet(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
-    Apply security patches to a fleet of servers (no reboot)."""
+    Apply security patches to a fleet or list of servers (no reboot)."""
     return run_ansible_job_logic("Patch Fleet", {"hostlist": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_reboot_fleet(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
-    Reboot a fleet of servers."""
+    Reboot a fleet or list of servers."""
     return run_ansible_job_logic("Reboot Fleet", {"hostlist": hostlist}, is_high_risk=True)
 
 @mcp.tool()
@@ -348,9 +348,9 @@ def ansible_fix_pcs(hostname: str) -> str:
     return run_ansible_job_logic("Fix PCS Cluster", {"hostname": hostname})
 
 @mcp.tool()
-def ansible_pcs_status(hostname: str) -> str:
-    """Retrieves the basic PCS Cluster health status from a node's perspective."""
-    return run_ansible_job_logic("PCS Status", {"hostname": hostname})
+def ansible_pcs_status(hostlist: str) -> str:
+    """Retrieves the basic PCS Cluster health status from a list of nodes/clusters."""
+    return run_ansible_job_logic("PCS Status", {"hostlist": hostlist})
 
 @mcp.tool()
 def ansible_send_email(recipient: str, subject: str, body: str) -> str:
@@ -358,9 +358,9 @@ def ansible_send_email(recipient: str, subject: str, body: str) -> str:
     return run_ansible_job_logic("Send Email Notification", {"recipient": recipient, "subject": subject, "body": body})
 
 @mcp.tool()
-def ansible_pcs_health_check(hostname: str) -> str:
-    """Retrieves a comprehensive health check for the PCS cluster from a node's perspective."""
-    return run_ansible_job_logic("PCS Health Check", {"hostname": hostname})
+def ansible_pcs_health_check(hostlist: str) -> str:
+    """Retrieves a comprehensive health check for PCS clusters from a list of hosts/clusters."""
+    return run_ansible_job_logic("PCS Health Check", {"hostlist": hostlist})
 
 @mcp.tool()
 def ansible_pcs_cib_upgrade(hostname: str) -> str:
@@ -373,15 +373,15 @@ def ansible_pcs_constraint_list(hostname: str) -> str:
     return run_ansible_job_logic("PCS Constraint List", {"hostname": hostname})
 
 @mcp.tool()
-def ansible_check_host_online(hostname: str) -> str:
-    """Verifies that a remote host is online and reachable on SSH port 22 after reboot."""
-    return run_ansible_job_logic("Check Host Online", {"hostname": hostname})
+def ansible_check_host_online(hostlist: str) -> str:
+    """Verifies that remote hosts are online and reachable on SSH port 22 after reboot."""
+    return run_ansible_job_logic("Check Host Online", {"hostlist": hostlist})
 
 @mcp.tool()
-def ansible_console_power_on(hostname: str) -> str:
+def ansible_console_power_on(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Brings up an unresponsive server via out-of-band management console / IPMI."""
-    return run_ansible_job_logic("Console Power On", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("Console Power On", {"hostlist": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_run_command(command: str, hostname: str) -> str:

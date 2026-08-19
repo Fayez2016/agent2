@@ -198,7 +198,8 @@ TOOL_TO_ACTION_NAME = {
     "ansible_vmware_vm_reset": "VMware VM Reset",
     "ansible_vmware_reset": "VMware VM Reset",
     "ansible_console_power_on": "Console Power On",
-    "ansible_run_command": "Limited Run Any Command"
+    "ansible_run_command": "Limited Run Any Command",
+    "HA Rolling Update": "Patch Fleet"
 }
 
 def enrich_step_with_hitl(step: dict) -> dict:
