@@ -434,106 +434,119 @@ async def chat_completions(
             yield f"data: {json.dumps({'event': 'status', 'data': 'Deep Agent analyzing cluster state & planning execution...'})}\n\n"
             
             try:
-                agent = await get_agent()
-                result = await agent.ainvoke(
-                    {"messages": [{"role": "user", "content": user_query}]},
-                    config={"recursion_limit": 10}
-                )
+                from app.agent_engine import execute_subagent_workflow_orchestrator
+                orch_res = await execute_subagent_workflow_orchestrator(user_query)
+                
+                if orch_res:
+                    intermediate_steps = []
+                    for step in orch_res.get("intermediate_steps", []):
+                        step = enrich_step_with_hitl(step)
+                        intermediate_steps.append(step)
+                        yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
+                        await asyncio.sleep(0.08)
+                    
+                    response_text = orch_res.get("response_text", "Operation completed.")
+                else:
+                    agent = await get_agent()
+                    result = await agent.ainvoke(
+                        {"messages": [{"role": "user", "content": user_query}]},
+                        config={"recursion_limit": 10}
+                    )
 
-                intermediate_steps = []
-                if isinstance(result, dict) and "messages" in result:
-                    messages = result["messages"]
-                    current_tool_calls = {}
-                    for msg in messages:
-                        tool_calls = getattr(msg, "tool_calls", None)
-                        if tool_calls and isinstance(tool_calls, list):
-                            for tc in tool_calls:
-                                call_id = tc.get("id") or tc.get("name")
-                                name = tc.get("name", "")
-                                args = tc.get("args") or {}
-                                
-                                step_type = "tool"
-                                target_subagent = None
-                                subagent_prompt = None
-                                
-                                if name == "task":
-                                    step_type = "subagent_delegation"
-                                    target_subagent = args.get("subagent_type") or args.get("agent") or args.get("name") or "subagent"
-                                    subagent_prompt = args.get("description") or args.get("prompt") or args.get("instructions") or ""
-                                elif name.startswith("ansible_"):
-                                    step_type = "mcp_tool"
-                                elif name in ["write_file", "read_file", "edit_file", "list_dir", "grep_files"]:
-                                    step_type = "filesystem_tool"
+                    intermediate_steps = []
+                    if isinstance(result, dict) and "messages" in result:
+                        messages = result["messages"]
+                        current_tool_calls = {}
+                        for msg in messages:
+                            tool_calls = getattr(msg, "tool_calls", None)
+                            if tool_calls and isinstance(tool_calls, list):
+                                for tc in tool_calls:
+                                    call_id = tc.get("id") or tc.get("name")
+                                    name = tc.get("name", "")
+                                    args = tc.get("args") or {}
+                                    
+                                    step_type = "tool"
+                                    target_subagent = None
+                                    subagent_prompt = None
+                                    
+                                    if name == "task":
+                                        step_type = "subagent_delegation"
+                                        target_subagent = args.get("subagent_type") or args.get("agent") or args.get("name") or "subagent"
+                                        subagent_prompt = args.get("description") or args.get("prompt") or args.get("instructions") or ""
+                                    elif name.startswith("ansible_"):
+                                        step_type = "mcp_tool"
+                                    elif name in ["write_file", "read_file", "edit_file", "list_dir", "grep_files"]:
+                                        step_type = "filesystem_tool"
 
-                                current_tool_calls[call_id] = {
-                                    "step_type": step_type,
-                                    "tool_name": name,
-                                    "tool_args": args,
-                                    "target_subagent": target_subagent,
-                                    "subagent_task_prompt": subagent_prompt,
-                                    "tool_output": ""
-                                }
-                        elif msg.__class__.__name__ == "ToolMessage":
+                                    current_tool_calls[call_id] = {
+                                        "step_type": step_type,
+                                        "tool_name": name,
+                                        "tool_args": args,
+                                        "target_subagent": target_subagent,
+                                        "subagent_task_prompt": subagent_prompt,
+                                        "tool_output": ""
+                                    }
+                            elif msg.__class__.__name__ == "ToolMessage":
+                                c = getattr(msg, "content", "")
+                                output_text = str(c)
+                                if isinstance(c, list):
+                                    text_items = [item.get("text", "") for item in c if isinstance(item, dict) and item.get("text")]
+                                    output_text = "\n".join(text_items)
+                                
+                                tool_call_id = getattr(msg, "tool_call_id", None)
+                                if tool_call_id and tool_call_id in current_tool_calls:
+                                    step = current_tool_calls.pop(tool_call_id)
+                                    step["tool_output"] = output_text
+                                    step = enrich_step_with_hitl(step)
+                                    intermediate_steps.append(step)
+                                    yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
+                                elif current_tool_calls:
+                                    _, step = current_tool_calls.popitem()
+                                    step["tool_output"] = output_text
+                                    step = enrich_step_with_hitl(step)
+                                    intermediate_steps.append(step)
+                                    yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
+                                else:
+                                    name = getattr(msg, "name", "tool")
+                                    step = {
+                                        "step_type": "mcp_tool" if name.startswith("ansible_") else "tool",
+                                        "tool_name": name,
+                                        "tool_args": {},
+                                        "target_subagent": None,
+                                        "subagent_task_prompt": None,
+                                        "tool_output": output_text
+                                    }
+                                    step = enrich_step_with_hitl(step)
+                                    intermediate_steps.append(step)
+                                    yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
+
+                    # Extract response text
+                    response_text = ""
+                    if isinstance(result, dict) and "messages" in result:
+                        messages = result["messages"]
+                        for msg in reversed(messages):
                             c = getattr(msg, "content", "")
-                            output_text = str(c)
                             if isinstance(c, list):
-                                text_items = [item.get("text", "") for item in c if isinstance(item, dict) and item.get("text")]
-                                output_text = "\n".join(text_items)
-                            
-                            tool_call_id = getattr(msg, "tool_call_id", None)
-                            if tool_call_id and tool_call_id in current_tool_calls:
-                                step = current_tool_calls.pop(tool_call_id)
-                                step["tool_output"] = output_text
-                                step = enrich_step_with_hitl(step)
-                                intermediate_steps.append(step)
-                                yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
-                            elif current_tool_calls:
-                                _, step = current_tool_calls.popitem()
-                                step["tool_output"] = output_text
-                                step = enrich_step_with_hitl(step)
-                                intermediate_steps.append(step)
-                                yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
-                            else:
-                                name = getattr(msg, "name", "tool")
-                                step = {
-                                    "step_type": "mcp_tool" if name.startswith("ansible_") else "tool",
-                                    "tool_name": name,
-                                    "tool_args": {},
-                                    "target_subagent": None,
-                                    "subagent_task_prompt": None,
-                                    "tool_output": output_text
-                                }
-                                step = enrich_step_with_hitl(step)
-                                intermediate_steps.append(step)
-                                yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
-
-                # Extract response text
-                response_text = ""
-                if isinstance(result, dict) and "messages" in result:
-                    messages = result["messages"]
-                    for msg in reversed(messages):
-                        c = getattr(msg, "content", "")
-                        if isinstance(c, list):
-                            for item in c:
-                                if isinstance(item, dict):
-                                    t = item.get("text", "")
-                                    if t:
-                                        try:
-                                            parsed = json.loads(t)
-                                            if isinstance(parsed, dict) and "output" in parsed:
-                                                response_text = str(parsed["output"]).strip()
+                                for item in c:
+                                    if isinstance(item, dict):
+                                        t = item.get("text", "")
+                                        if t:
+                                            try:
+                                                parsed = json.loads(t)
+                                                if isinstance(parsed, dict) and "output" in parsed:
+                                                    response_text = str(parsed["output"]).strip()
+                                                    break
+                                            except Exception:
+                                                response_text = str(t).strip()
                                                 break
-                                        except Exception:
-                                            response_text = str(t).strip()
-                                            break
-                            if response_text:
+                                if response_text:
+                                    break
+                            elif isinstance(c, str) and c.strip():
+                                response_text = c.strip()
                                 break
-                        elif isinstance(c, str) and c.strip():
-                            response_text = c.strip()
-                            break
 
-                if not response_text:
-                    response_text = "Operation completed via Ansible MCP."
+                    if not response_text:
+                        response_text = "Operation completed via Ansible MCP."
 
                 # Stream response tokens chunk by chunk
                 words = response_text.split(" ")
@@ -578,109 +591,115 @@ async def chat_completions(
 
     # --- Mode 2: Standard Synchronous Response ---
     try:
-        agent = await get_agent()
-        result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": user_query}]},
-            config={"recursion_limit": 10}
-        )
+        from app.agent_engine import execute_subagent_workflow_orchestrator
+        orch_res = await execute_subagent_workflow_orchestrator(user_query)
         
-        intermediate_steps = []
-        if isinstance(result, dict) and "messages" in result:
-            messages = result["messages"]
-            current_tool_calls = {}
-            for msg in messages:
-                tool_calls = getattr(msg, "tool_calls", None)
-                if tool_calls and isinstance(tool_calls, list):
-                    for tc in tool_calls:
-                        call_id = tc.get("id") or tc.get("name")
-                        name = tc.get("name", "")
-                        args = tc.get("args") or {}
-                        
-                        step_type = "tool"
-                        target_subagent = None
-                        subagent_prompt = None
-                        
-                        if name == "task":
-                            step_type = "subagent_delegation"
-                            target_subagent = args.get("subagent_type") or args.get("agent") or args.get("name") or "subagent"
-                            subagent_prompt = args.get("description") or args.get("prompt") or args.get("instructions") or ""
-                        elif name.startswith("ansible_"):
-                            step_type = "mcp_tool"
-                        elif name in ["write_file", "read_file", "edit_file", "list_dir", "grep_files"]:
-                            step_type = "filesystem_tool"
+        if orch_res:
+            intermediate_steps = [enrich_step_with_hitl(s) for s in orch_res.get("intermediate_steps", [])]
+            response_text = orch_res.get("response_text", "Operation completed.")
+        else:
+            agent = await get_agent()
+            result = await agent.ainvoke(
+                {"messages": [{"role": "user", "content": user_query}]},
+                config={"recursion_limit": 10}
+            )
+            
+            intermediate_steps = []
+            if isinstance(result, dict) and "messages" in result:
+                messages = result["messages"]
+                current_tool_calls = {}
+                for msg in messages:
+                    tool_calls = getattr(msg, "tool_calls", None)
+                    if tool_calls and isinstance(tool_calls, list):
+                        for tc in tool_calls:
+                            call_id = tc.get("id") or tc.get("name")
+                            name = tc.get("name", "")
+                            args = tc.get("args") or {}
+                            
+                            step_type = "tool"
+                            target_subagent = None
+                            subagent_prompt = None
+                            
+                            if name == "task":
+                                step_type = "subagent_delegation"
+                                target_subagent = args.get("subagent_type") or args.get("agent") or args.get("name") or "subagent"
+                                subagent_prompt = args.get("description") or args.get("prompt") or args.get("instructions") or ""
+                            elif name.startswith("ansible_"):
+                                step_type = "mcp_tool"
+                            elif name in ["write_file", "read_file", "edit_file", "list_dir", "grep_files"]:
+                                step_type = "filesystem_tool"
 
-                        current_tool_calls[call_id] = {
-                            "step_type": step_type,
-                            "tool_name": name,
-                            "tool_args": args,
-                            "target_subagent": target_subagent,
-                            "subagent_task_prompt": subagent_prompt,
-                            "tool_output": ""
-                        }
-                elif msg.__class__.__name__ == "ToolMessage":
+                            current_tool_calls[call_id] = {
+                                "step_type": step_type,
+                                "tool_name": name,
+                                "tool_args": args,
+                                "target_subagent": target_subagent,
+                                "subagent_task_prompt": subagent_prompt,
+                                "tool_output": ""
+                            }
+                    elif msg.__class__.__name__ == "ToolMessage":
+                        c = getattr(msg, "content", "")
+                        output_text = str(c)
+                        if isinstance(c, list):
+                            text_items = [item.get("text", "") for item in c if isinstance(item, dict) and item.get("text")]
+                            output_text = "\n".join(text_items)
+                        
+                        tool_call_id = getattr(msg, "tool_call_id", None)
+                        if tool_call_id and tool_call_id in current_tool_calls:
+                            step = current_tool_calls.pop(tool_call_id)
+                            step["tool_output"] = output_text
+                            step = enrich_step_with_hitl(step)
+                            intermediate_steps.append(step)
+                        elif current_tool_calls:
+                            _, step = current_tool_calls.popitem()
+                            step["tool_output"] = output_text
+                            step = enrich_step_with_hitl(step)
+                            intermediate_steps.append(step)
+                        else:
+                            name = getattr(msg, "name", "tool")
+                            step = {
+                                "step_type": "mcp_tool" if name.startswith("ansible_") else "tool",
+                                "tool_name": name,
+                                "tool_args": {},
+                                "target_subagent": None,
+                                "subagent_task_prompt": None,
+                                "tool_output": output_text
+                            }
+                            step = enrich_step_with_hitl(step)
+                            intermediate_steps.append(step)
+
+            response_text = ""
+            if isinstance(result, dict) and "messages" in result:
+                messages = result["messages"]
+                for msg in reversed(messages):
                     c = getattr(msg, "content", "")
-                    output_text = str(c)
-                    if isinstance(c, list):
-                        text_items = [item.get("text", "") for item in c if isinstance(item, dict) and item.get("text")]
-                        output_text = "\n".join(text_items)
                     
-                    tool_call_id = getattr(msg, "tool_call_id", None)
-                    if tool_call_id and tool_call_id in current_tool_calls:
-                        step = current_tool_calls.pop(tool_call_id)
-                        step["tool_output"] = output_text
-                        step = enrich_step_with_hitl(step)
-                        intermediate_steps.append(step)
-                    elif current_tool_calls:
-                        _, step = current_tool_calls.popitem()
-                        step["tool_output"] = output_text
-                        step = enrich_step_with_hitl(step)
-                        intermediate_steps.append(step)
-                    else:
-                        name = getattr(msg, "name", "tool")
-                        step = {
-                            "step_type": "mcp_tool" if name.startswith("ansible_") else "tool",
-                            "tool_name": name,
-                            "tool_args": {},
-                            "target_subagent": None,
-                            "subagent_task_prompt": None,
-                            "tool_output": output_text
-                        }
-                        step = enrich_step_with_hitl(step)
-                        intermediate_steps.append(step)
-
-        # Extract assistant response from result
-        response_text = ""
-        if isinstance(result, dict) and "messages" in result:
-            messages = result["messages"]
-            for msg in reversed(messages):
-                c = getattr(msg, "content", "")
-                
-                # Case 1: List of dicts (LangChain ToolMessage structure)
-                if isinstance(c, list):
-                    for item in c:
-                        if isinstance(item, dict):
-                            t = item.get("text", "")
-                            if t:
-                                try:
-                                    parsed = json.loads(t)
-                                    if isinstance(parsed, dict) and "output" in parsed:
-                                        response_text = str(parsed["output"]).strip()
+                    # Case 1: List of dicts (LangChain ToolMessage structure)
+                    if isinstance(c, list):
+                        for item in c:
+                            if isinstance(item, dict):
+                                t = item.get("text", "")
+                                if t:
+                                    try:
+                                        parsed = json.loads(t)
+                                        if isinstance(parsed, dict) and "output" in parsed:
+                                            response_text = str(parsed["output"]).strip()
+                                            break
+                                        elif isinstance(parsed, dict) and "error" in parsed:
+                                            continue
+                                    except Exception:
+                                        response_text = str(t).strip()
                                         break
-                                    elif isinstance(parsed, dict) and "error" in parsed:
-                                        continue
-                                except Exception:
-                                    response_text = str(t).strip()
-                                    break
-                    if response_text:
+                        if response_text:
+                            break
+                    
+                    # Case 2: String content (AIMessage)
+                    elif isinstance(c, str) and c.strip():
+                        response_text = c.strip()
                         break
-                
-                # Case 2: String content (AIMessage)
-                elif isinstance(c, str) and c.strip():
-                    response_text = c.strip()
-                    break
 
-        if not response_text:
-            response_text = "Operation completed via Ansible MCP."
+            if not response_text:
+                response_text = "Operation completed via Ansible MCP."
             
         logger.info(f"Deep Agent invocation completed successfully. Intermediate steps: {len(intermediate_steps)}")
     except Exception as e:
