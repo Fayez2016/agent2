@@ -4,6 +4,7 @@ import time
 import logging
 import sys
 import json
+import re
 from datetime import datetime
 
 logging.basicConfig(
@@ -14,26 +15,14 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
-logger = logging.getLogger("AAP-Server")
+logger = logging.getLogger("AAP-Simulation-Engine")
 
 app = Flask(__name__)
 
-# 10 HA Clusters with 2 nodes and dedicated resource groups
-HA_CLUSTERS = {
-    f"ha-cluster-{i:02d}": {
-        "nodes": [f"rhel-ha-{i:02d}-node1", f"rhel-ha-{i:02d}-node2"],
-        "resource_groups": [f"rg_app_{i:02d} (vip_app_{i:02d}, fs_app_{i:02d}, svc_app_{i:02d})"]
-    }
-    for i in range(1, 11)
-}
-
-ALL_HA_NODES = [node for c in HA_CLUSTERS.values() for node in c["nodes"]]
-ALL_FLEET_SERVERS = [f"rhel-prod-{i:02d}" for i in range(1, 11)]
-
-# State tracking for console recovery
+# State tracking for dynamic simulation
 CONSOLE_RECOVERED_HOSTS = set()
+SIMULATED_FAILURES = {}
 
-# Template ID mapping
 TEMPLATE_MAP = {
     "Limited Run Any Command": 101,
     "Reboot Host": 102,
@@ -70,21 +59,18 @@ jobs = {}
 def get_iso_now():
     return datetime.utcnow().isoformat() + "Z"
 
-def parse_hostlist(extra_vars):
-    raw = extra_vars.get('hostlist') or extra_vars.get('hostname') or extra_vars.get('target_hosts') or ''
-    if isinstance(raw, list):
-        return raw
-    if isinstance(raw, str) and raw.strip():
-        # Check if cluster names provided
-        tokens = [h.strip() for h in raw.split(',') if h.strip()]
-        expanded = []
-        for t in tokens:
-            if t in HA_CLUSTERS:
-                expanded.extend(HA_CLUSTERS[t]["nodes"])
-            else:
-                expanded.append(t)
-        return expanded
-    return ALL_HA_NODES
+def extract_host_tokens(raw_input) -> list:
+    """Universally parses any input format (comma-delimited, space-delimited, list, JSON) into distinct host tokens."""
+    if not raw_input:
+        return ["srv-generic-01"]
+    if isinstance(raw_input, list):
+        return [str(x).strip() for x in raw_input if str(x).strip()]
+    
+    cleaned = str(raw_input).strip()
+    # Split by comma or whitespace
+    tokens = re.split(r'[,\s]+', cleaned)
+    tokens = [t.strip() for t in tokens if t.strip() and t.lower() not in ["and", "to", "across", "hosts", "clusters", "the"]]
+    return tokens if tokens else ["srv-generic-01"]
 
 @app.route('/api/v2/job_templates', methods=['GET'])
 def get_job_templates():
@@ -101,7 +87,7 @@ def get_job_templates():
                 "type": "job_template",
                 "url": f"/api/v2/job_templates/{template_id}/",
                 "name": name,
-                "description": f"Batch automation mock for {name}",
+                "description": f"Dynamic SRE infrastructure simulation for {name}",
                 "job_type": "run",
                 "inventory": 1,
                 "project": 1,
@@ -121,10 +107,12 @@ def launch_job(template_id):
         if data:
             extra_vars = data.get('extra_vars', {})
     
+    # Record console recovery for target hosts
     if template_id in [107, 128]: # VMware Reset or Console Power On
-        h = extra_vars.get('hostname') or extra_vars.get('vm_name') or extra_vars.get('hostlist', '')
-        if h:
-            CONSOLE_RECOVERED_HOSTS.add(str(h))
+        raw = extra_vars.get('hostlist') or extra_vars.get('hostname') or extra_vars.get('vm_name') or ''
+        for h in extract_host_tokens(raw):
+            CONSOLE_RECOVERED_HOSTS.add(h)
+            logger.info(f"Recorded out-of-band console recovery for host: {h}")
 
     jobs[job_id] = {
         "id": job_id,
@@ -148,13 +136,13 @@ def get_job_status(job_id):
         return jsonify({"detail": "Not found."}), 404
     
     elapsed = time.time() - job["start_time"]
-    current_status = "running" if elapsed < 0.2 else job["status"]
+    current_status = "running" if elapsed < 0.1 else job["status"]
     
     return jsonify({
         "id": job_id,
         "type": "job",
         "url": f"/api/v2/jobs/{job_id}/",
-        "name": "Simulated Batch Job",
+        "name": "Dynamic Simulation Job",
         "status": current_status,
         "failed": False,
         "started": job["created"],
@@ -171,101 +159,120 @@ def get_job_stdout(job_id):
     
     template_id = job["template_id"]
     extra_vars = job["extra_vars"]
-    targets = parse_hostlist(extra_vars)
+    raw_targets = extra_vars.get('hostlist') or extra_vars.get('hostname') or extra_vars.get('target_hosts') or ''
+    targets = extract_host_tokens(raw_targets)
 
-    # 1. PCS Cluster Health Check (Batch across clusters)
+    # 1. PCS Cluster Health Check (Dynamically generates cluster topology for whatever targets passed)
     if template_id == 120:
-        lines = ["PLAY [PCS Cluster Health Check - Batch Validation] **************************"]
-        lines.append("TASK [Inspect Pacemaker Quorum & Resource Groups] ******************************")
-        for i in range(1, 11):
-            c_name = f"ha-cluster-{i:02d}"
-            n1 = f"rhel-ha-{i:02d}-node1"
-            n2 = f"rhel-ha-{i:02d}-node2"
-            rg = f"rg_app_{i:02d}"
-            lines.append(f"ok: [{c_name}] => {{")
+        lines = [f"PLAY [PCS Cluster Health Check - Dynamic Inspection ({len(targets)} Targets)] *********"]
+        lines.append("TASK [Inspect Pacemaker Quorum, STONITH & Resource Groups] ********************")
+        for t in targets:
+            c_name = t if "cluster" in t else f"cluster-{t}"
+            n1 = f"{t}-node1" if not ("node1" in t or "node2" in t) else t
+            n2 = f"{t}-node2" if not ("node1" in t or "node2" in t) else f"{t}-peer"
+            rg = f"rg_{t}"
+            lines.append(f"ok: [{t}] => {{")
             lines.append(f"    \"cluster\": \"{c_name}\",")
-            lines.append(f"    \"quorum\": \"QUORATE (2/2 nodes active: {n1}, {n2})\",")
+            lines.append(f"    \"quorum\": \"QUORATE (Active members: {n1}, {n2})\",")
             lines.append(f"    \"stonith\": \"ENABLED (fence_ipmilan active)\",")
-            lines.append(f"    \"resource_groups\": [\"{rg} -> active on {n1}\"],")
+            lines.append(f"    \"resource_groups\": [\"{rg} (vip_{t}, fs_{t}, app_{t}) -> active on {n1}\"],")
             lines.append(f"    \"health_status\": \"PASS\"")
             lines.append("}")
         lines.append("\nPLAY RECAP *********************************************************************")
-        lines.append("localhost                      : ok=10   changed=0    unreachable=0    failed=0")
+        lines.append(f"localhost                      : ok={len(targets)}   changed=0    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 2. PCS Node Standby (Batch Evacuation)
+    # 2. PCS Node Standby (Dynamic Evacuation)
     if template_id == 114:
-        lines = [f"PLAY [PCS Node Standby - Batch Evacuation ({len(targets)} Nodes)] *******************"]
-        lines.append("TASK [Put Target Nodes in Standby & Evacuate Resources] *************************")
+        lines = [f"PLAY [PCS Node Standby - Evacuation ({len(targets)} Nodes)] **********************"]
+        lines.append("TASK [Set Standby State & Trigger Resource Failover] ***************************")
         for t in targets:
-            lines.append(f"changed: [{t}] => {{ \"msg\": \"Node {t} put in STANDBY. Resources failed over to peer node.\" }}")
+            lines.append(f"changed: [{t}] => {{ \"node\": \"{t}\", \"state\": \"STANDBY\", \"msg\": \"Resources migrated to active peer.\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 3. Patch Fleet (Batch DNF Security Updates)
+    # 3. Patch Fleet (Dynamic Package Updates)
     if template_id == 110:
-        lines = [f"PLAY [Patch Fleet - Batch DNF Package Updates ({len(targets)} Servers)] ***********"]
-        lines.append("TASK [Apply Security & Bugfix Packages via DNF] *********************************")
+        lines = [f"PLAY [Patch Fleet - DNF Package Updates ({len(targets)} Servers)] ****************"]
+        lines.append("TASK [Apply Security & Enhancement Packages via DNF] ***************************")
         for t in targets:
-            lines.append(f"changed: [{t}] => {{ \"packages_updated\": 14, \"reboot_required\": true }}")
+            if "fail" in t.lower() or "err" in t.lower():
+                lines.append(f"failed: [{t}] => {{ \"stage\": \"Patching\", \"error\": \"DNF Transaction Error: GPG key verification failed for package kernel-core.\", \"reboot_required\": false }}")
+            else:
+                pkgs = random.randint(12, 28)
+                lines.append(f"changed: [{t}] => {{ \"packages_updated\": {pkgs}, \"reboot_required\": true, \"status\": \"applied\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=3    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 4. Reboot Fleet / Host (Batch Managed Reboot)
+    # 4. Managed Reboot (Dynamic Timing)
     if template_id in [102, 111]:
         lines = [f"PLAY [Managed Fleet Reboot - ({len(targets)} Servers)] **************************"]
-        lines.append("TASK [Issue Managed System Reboot] **********************************************")
+        lines.append("TASK [Issue Managed System Reboot & Await Connection] ***************************")
         for t in targets:
-            elapsed = 38 if "node1" in t or "prod-01" in t else 44
-            lines.append(f"changed: [{t}] => {{ \"msg\": \"Reboot completed. Elapsed: {elapsed} seconds.\" }}")
+            elapsed = random.randint(32, 48)
+            lines.append(f"changed: [{t}] => {{ \"msg\": \"Reboot completed cleanly.\", \"elapsed_sec\": {elapsed} }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 5. Check Host Online (Batch TCP/SSH Port 22 Verification)
+    # 5. Check Host Online (Dynamic Uptime & Soft-Hang Simulation)
     if template_id == 127:
-        lines = [f"PLAY [Check Host Online - Batch Verification ({len(targets)} Servers)] *********"]
-        lines.append("TASK [Verify SSH Port 22 Responsiveness] ***************************************")
+        lines = [f"PLAY [Check Host Online - TCP Port 22 Verification ({len(targets)} Targets)] ****"]
+        lines.append("TASK [Probe SSH Port 22 & Validate OS Uptime] **********************************")
         for t in targets:
-            if "node1" in t and "03" in t and t not in CONSOLE_RECOVERED_HOSTS:
-                lines.append(f"failed: [{t}] => {{ \"online\": false, \"stage\": \"Reboot\", \"error\": \"SSH Port 22 timeout after reboot - host unresponsive.\" }}")
+            # If target has 'hang' in name or is node1 of the 3rd item, simulate a soft hang until recovered
+            is_hung = ("hang" in t.lower() or (len(targets) >= 3 and t == targets[2])) and (t not in CONSOLE_RECOVERED_HOSTS)
+            if is_hung:
+                lines.append(f"failed: [{t}] => {{ \"online\": false, \"stage\": \"Reboot Verification\", \"error\": \"SSH Port 22 connection timed out (Kernel soft hang detected).\" }}")
             else:
-                method = "Console Recovered" if t in CONSOLE_RECOVERED_HOSTS else "Standard SSH"
-                lines.append(f"ok: [{t}] => {{ \"online\": true, \"uptime\": \"55s\", \"boot_method\": \"{method}\" }}")
+                method = "Console Recovered (IPMI)" if t in CONSOLE_RECOVERED_HOSTS else "Standard SSH"
+                uptime = f"{random.randint(40, 90)}s"
+                lines.append(f"ok: [{t}] => {{ \"online\": true, \"uptime\": \"{uptime}\", \"boot_method\": \"{method}\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=0    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 6. Out-of-band Console Power On / VMware Reset
+    # 6. Out-of-Band Console Power On / VMware Reset
     if template_id in [107, 128]:
-        lines = [f"PLAY [Out-of-Band Console Power Recovery ({len(targets)} Targets)] ****************"]
-        lines.append("TASK [Trigger IPMI / Console Hard Power-On] *************************************")
+        lines = [f"PLAY [Out-of-Band Console Power On / Hardware Cycle ({len(targets)} Targets)] ***"]
+        lines.append("TASK [Issue Hardware Power-On via IPMI / Out-of-Band Interface] ****************")
         for t in targets:
             CONSOLE_RECOVERED_HOSTS.add(t)
-            lines.append(f"changed: [{t}] => {{ \"msg\": \"Console power-on triggered. Node booted successfully into OS.\" }}")
+            lines.append(f"changed: [{t}] => {{ \"msg\": \"Power-on signal issued via IPMI. Hardware rebooted into OS successfully.\", \"status\": \"recovered\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 7. PCS Node Unstandby (Batch Reintegration)
+    # 7. PCS Node Unstandby (Dynamic Reintegration)
     if template_id == 115:
-        lines = [f"PLAY [PCS Node Unstandby - Batch Reintegration ({len(targets)} Nodes)] *************"]
-        lines.append("TASK [Clear Standby & Reintegrate Nodes] ****************************************")
+        lines = [f"PLAY [PCS Node Unstandby - Reintegration ({len(targets)} Nodes)] *****************"]
+        lines.append("TASK [Clear Standby State & Restore Cluster Quorum] *****************************")
         for t in targets:
-            lines.append(f"changed: [{t}] => {{ \"msg\": \"Node {t} unstandby completed. Cluster quorate and balanced.\" }}")
+            lines.append(f"changed: [{t}] => {{ \"node\": \"{t}\", \"state\": \"UNSTANDBY\", \"msg\": \"Node reintegrated into cluster successfully. Quorum balanced.\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 8. Send Email Notification
+    # 8. PCS Status Post-Check
+    if template_id == 108:
+        lines = [f"PLAY [PCS Status Post-Check ({len(targets)} Clusters)] **************************"]
+        lines.append("TASK [Inspect Final Quorum & Balanced Resource Groups] *************************")
+        for t in targets:
+            lines.append(f"ok: [{t}] => {{ \"cluster\": \"{t}\", \"quorum\": \"QUORATE (All members online)\", \"resource_groups\": \"Healthy & Balanced\" }}")
+        lines.append("\nPLAY RECAP *********************************************************************")
+        for t in targets:
+            lines.append(f"{t:30} : ok=2    changed=0    unreachable=0    failed=0")
+        return "\n".join(lines)
+
+    # 9. Send Email Notification
     if template_id == 109:
         recipient = extra_vars.get('recipient', 'admin@enterprise.local')
         subj = extra_vars.get('subject', '[SRE Report] Maintenance Completed')
@@ -283,8 +290,8 @@ localhost                      : ok=2    changed=1    unreachable=0    failed=0
 
     # Generic Fallback
     return f"""
-PLAY [Generic Job] *************************************************************
-ok: [localhost] => {{ "msg": "Operation completed on batch targets." }}
+PLAY [Generic Operation on {len(targets)} Targets] ******************************
+ok: [localhost] => {{ "msg": "Operation completed on all target hosts." }}
 PLAY RECAP *********************************************************************
 localhost                      : ok=1    changed=0    unreachable=0    failed=0
 """
