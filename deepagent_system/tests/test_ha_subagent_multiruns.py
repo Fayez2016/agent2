@@ -27,14 +27,17 @@ API_KEY = "hermes-api-secret"
 def log(msg):
     print(f"[HA-MULTI-TEST] {msg}", flush=True)
 
-def generate_random_cluster_batch(count: int) -> list:
+def generate_random_cluster_batch(count: int, include_hang: bool = False) -> list:
     """Generates unique, randomized cluster names."""
     geo_names = ["us-east", "eu-west", "ap-south", "ca-central", "sa-east", "me-central", "af-south", "nordic", "tokyo", "frankfurt"]
     selected = random.sample(geo_names, min(count, len(geo_names)))
-    return [f"cluster-{name}-{uuid.uuid4().hex[:4]}" for name in selected]
+    clusters = [f"cluster-{name}-{uuid.uuid4().hex[:4]}" for name in selected]
+    if include_hang and clusters:
+        clusters[0] = f"{clusters[0]}-hang"
+    return clusters
 
 def execute_ha_test_run(run_number: int, cluster_count: int, simulate_soft_hang: bool = False):
-    clusters = generate_random_cluster_batch(cluster_count)
+    clusters = generate_random_cluster_batch(cluster_count, include_hang=simulate_soft_hang)
     cluster_str = ", ".join(clusters)
     scenario_type = "Soft-Hang & Out-of-Band IPMI Recovery" if simulate_soft_hang else "Clean Zero-Downtime Run"
 

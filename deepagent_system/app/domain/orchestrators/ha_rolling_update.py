@@ -115,30 +115,29 @@ class HARollingUpdateOrchestrator:
 
         # Step 7: Check if any host timed out and trigger out-of-band Console Power On
         recovered_nodes = []
-        if "failed:" in check_out_1.lower() or "unreachable:" in check_out_1.lower() or "timed out" in check_out_1.lower():
-            hung_targets = [n for n in node1_list if f"failed: [{n}]" in check_out_1 or f"unreachable: [{n}]" in check_out_1 or (f"[{n}]" in check_out_1 and "failed" in check_out_1)]
-            hung_str = ",".join(hung_targets)
-            if "ansible_console_power_on" in tools_dict and hung_str:
-                res = await tools_dict["ansible_console_power_on"].ainvoke({"hostlist": hung_str})
-                recovered_nodes.extend(hung_targets)
+        hung_targets = [n for n in node1_list if f"failed: [{n}]" in check_out_1 or f"unreachable: [{n}]" in check_out_1 or (f"[{n}]" in check_out_1 and "failed:" in check_out_1)]
+        hung_str = ",".join(hung_targets)
+        if "ansible_console_power_on" in tools_dict and hung_str:
+            res = await tools_dict["ansible_console_power_on"].ainvoke({"hostlist": hung_str})
+            recovered_nodes.extend(hung_targets)
+            steps.append({
+                "step_type": "mcp_tool",
+                "tool_name": "ansible_console_power_on",
+                "tool_args": {"hostlist": hung_str},
+                "target_subagent": None,
+                "subagent_task_prompt": None,
+                "tool_output": str(res)
+            })
+            if "ansible_check_host_online" in tools_dict:
+                res_re = await tools_dict["ansible_check_host_online"].ainvoke({"hostlist": hung_str})
                 steps.append({
                     "step_type": "mcp_tool",
-                    "tool_name": "ansible_console_power_on",
+                    "tool_name": "ansible_check_host_online",
                     "tool_args": {"hostlist": hung_str},
                     "target_subagent": None,
                     "subagent_task_prompt": None,
-                    "tool_output": str(res)
+                    "tool_output": str(res_re)
                 })
-                if "ansible_check_host_online" in tools_dict:
-                    res_re = await tools_dict["ansible_check_host_online"].ainvoke({"hostlist": hung_str})
-                    steps.append({
-                        "step_type": "mcp_tool",
-                        "tool_name": "ansible_check_host_online",
-                        "tool_args": {"hostlist": hung_str},
-                        "target_subagent": None,
-                        "subagent_task_prompt": None,
-                        "tool_output": str(res_re)
-                    })
 
         # Step 8: Reintegrate Node 1 targets (Unstandby)
         if "ansible_pcs_node_unstandby" in tools_dict:

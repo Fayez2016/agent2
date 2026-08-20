@@ -40,7 +40,7 @@ class FleetPatcherOrchestrator:
                 "tool_output": patch_out
             })
             for h in target_hosts:
-                if f"failed: [{h}]" in patch_out or (f"[{h}]" in patch_out and "DNF Transaction Error" in patch_out):
+                if f"failed: [{h}]" in patch_out or f"[{h}] => {{ \"stage\": \"Patching\", \"error\"" in patch_out or (f"[{h}]" in patch_out and "failed" in patch_out):
                     failed_patch_hosts[h] = "DNF Package Dependency Error / GPG Key verification failed."
 
         # Step 3: Batch Reboot Fleet
@@ -73,31 +73,31 @@ class FleetPatcherOrchestrator:
 
         # Step 5: Out-of-band Console Recovery if any host timed out
         recovered_hosts = []
-        if "failed:" in check_out.lower() or "unreachable:" in check_out.lower() or "timed out" in check_out.lower():
-            hung = [h for h in target_hosts if f"failed: [{h}]" in check_out or f"unreachable: [{h}]" in check_out or (f"[{h}]" in check_out and "failed" in check_out)]
-            if hung and "ansible_console_power_on" in tools_dict:
-                hung_str = ",".join(hung)
-                res = await tools_dict["ansible_console_power_on"].ainvoke({"hostlist": hung_str})
-                recovered_hosts.extend(hung)
+        hung = [h for h in target_hosts if f"failed: [{h}]" in check_out or f"unreachable: [{h}]" in check_out or (f"[{h}]" in check_out and "failed:" in check_out)]
+            
+        if hung and "ansible_console_power_on" in tools_dict:
+            hung_str = ",".join(hung)
+            res = await tools_dict["ansible_console_power_on"].ainvoke({"hostlist": hung_str})
+            recovered_hosts.extend(hung)
+            steps.append({
+                "step_type": "mcp_tool",
+                "tool_name": "ansible_console_power_on",
+                "tool_args": {"hostlist": hung_str},
+                "target_subagent": None,
+                "subagent_task_prompt": None,
+                "tool_output": str(res)
+            })
+            # Re-check online for recovered targets
+            if "ansible_check_host_online" in tools_dict:
+                res_re = await tools_dict["ansible_check_host_online"].ainvoke({"hostlist": hung_str})
                 steps.append({
                     "step_type": "mcp_tool",
-                    "tool_name": "ansible_console_power_on",
+                    "tool_name": "ansible_check_host_online",
                     "tool_args": {"hostlist": hung_str},
                     "target_subagent": None,
                     "subagent_task_prompt": None,
-                    "tool_output": str(res)
+                    "tool_output": str(res_re)
                 })
-                # Re-check online for recovered targets
-                if "ansible_check_host_online" in tools_dict:
-                    res_re = await tools_dict["ansible_check_host_online"].ainvoke({"hostlist": hung_str})
-                    steps.append({
-                        "step_type": "mcp_tool",
-                        "tool_name": "ansible_check_host_online",
-                        "tool_args": {"hostlist": hung_str},
-                        "target_subagent": None,
-                        "subagent_task_prompt": None,
-                        "tool_output": str(res_re)
-                    })
 
         # Step 6: Send Email Notification
         if "ansible_send_email" in tools_dict:
