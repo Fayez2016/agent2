@@ -282,11 +282,14 @@ body {
   justify-content: space-between;
   background-color: rgba(15, 23, 42, 0.7);
   backdrop-filter: blur(8px);
+  gap: 16px;
+  overflow-x: auto;
 }
 
 .view-tabs {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .tab-btn {
@@ -299,6 +302,7 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .tab-btn:hover {
@@ -315,6 +319,8 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .export-btn {
@@ -330,6 +336,7 @@ body {
   align-items: center;
   gap: 6px;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .export-btn:hover {

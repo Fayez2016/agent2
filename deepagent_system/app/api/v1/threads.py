@@ -39,6 +39,48 @@ async def get_thread_messages(thread_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load messages for thread {thread_id}: {e}")
 
+@router.get("/{thread_id}/export")
+async def export_thread(thread_id: str):
+    """Generates a complete SRE Post-Mortem & Audit Report in Markdown for the thread."""
+    try:
+        messages = ThreadRepository.get_messages(thread_id)
+        if not messages:
+            return {"markdown": "# Deep Agent SRE Report\n\nNo execution history recorded for this session."}
+            
+        md_lines = [
+            f"# 📋 Deep Agent Infrastructure Execution & Post-Mortem Report",
+            f"**Session ID:** `{thread_id}`",
+            f"**Export Timestamp:** `{messages[-1].get('created_at', 'N/A')}`\n",
+            "---",
+            "## 1. Conversational History & Operational Directives\n"
+        ]
+        
+        for idx, m in enumerate(messages, 1):
+            role_badge = "👤 **Operator Instruction**" if m["role"] == "user" else "🤖 **Deep Agent Response**"
+            md_lines.append(f"### Step {idx}: {role_badge}")
+            md_lines.append(m["content"])
+            
+            steps = m.get("intermediate_steps")
+            if isinstance(steps, str):
+                import json
+                try:
+                    steps = json.loads(steps)
+                except Exception:
+                    steps = []
+                    
+            if steps and len(steps) > 0:
+                md_lines.append("\n#### FastMCP Execution & Subagent Audit Trail:")
+                for s in steps:
+                    t_name = s.get("tool_name") or s.get("target_subagent") or "Tool Call"
+                    t_args = s.get("tool_args") or {}
+                    hitl = f" [HITL: {s.get('hitl_status')}]" if s.get("hitl_status") else ""
+                    md_lines.append(f"- **`{t_name}`**{hitl}: `{t_args}`")
+            md_lines.append("\n---\n")
+            
+        return {"markdown": "\n".join(md_lines)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to export thread: {e}")
+
 @router.delete("/{thread_id}")
 async def delete_thread(thread_id: str):
     """Deletes a thread and all associated messages."""

@@ -102,7 +102,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: Option
                         step = enrich_step_with_hitl(step)
                         intermediate_steps.append(step)
                         yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
-                        await asyncio.sleep(0.75)
+                        await asyncio.sleep(1.2)
                     response_text = orch_res.get("response_text", "Operation completed.")
                 else:
                     agent = await get_agent()
@@ -117,8 +117,8 @@ async def chat_completions(request: ChatCompletionRequest, authorization: Option
                 words = response_text.split(" ")
                 for i, word in enumerate(words):
                     chunk = word + (" " if i < len(words) - 1 else "")
-                    yield f"data: {json.dumps({'event': 'token', 'token': chunk})}\n\n"
-                    await asyncio.sleep(0.02)
+                    yield f"data: {json.dumps({'event': 'token', 'token': chunk, 'chunk': chunk})}\n\n"
+                    await asyncio.sleep(0.015)
 
                 if thread_id:
                     try:
