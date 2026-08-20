@@ -10,5 +10,6 @@ uvicorn
 httpx
 mcp
 pydantic
+pydantic-settings
 python-dotenv
 requests

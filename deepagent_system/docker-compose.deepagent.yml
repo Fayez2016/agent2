@@ -73,6 +73,18 @@ services:
     networks:
       - deepagent_net
 
+  sop-mcp:
+    build:
+      context: ./sop_mcp_server
+      dockerfile: Dockerfile
+    image: deepagent_sop-mcp:latest
+    container_name: deepagent-sop-mcp
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    networks:
+      - deepagent_net
+
   deepagent:
     build:
       context: .
@@ -87,6 +99,7 @@ services:
       - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_MODEL=qwen2.5:3b
       - MCP_SERVER_URL=http://ansible-mcp:8000/mcp
+      - SOP_MCP_URL=http://sop-mcp:8001/mcp
       - API_PORT=8642
       - API_SERVER_KEY=hermes-api-secret
     volumes:
@@ -96,6 +109,7 @@ services:
     depends_on:
       - ollama
       - ansible-mcp
+      - sop-mcp
     networks:
       - deepagent_net
 
