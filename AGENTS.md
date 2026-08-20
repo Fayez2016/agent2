@@ -27,5 +27,7 @@
 - **Workflow:** 1. Request HITL with the exact action name. 2. Wait for GRANTED. 3. Execute the tool.
 
 # System Knowledge
-- External tools and fleet access are provided via the `ansible` MCP server at `http://ansible-mcp:8000/mcp`.
-- All agent state and persistent configuration are stored in the `/opt/data` directory (mapped to `./.hermes/` on the host).
+- External tools and fleet access are provided via the Multi-Server MCP architecture:
+  - **Ansible Execution MCP Server:** `http://deepagent-ansible-mcp:8000/mcp`
+  - **Dedicated SOP FastMCP Server:** `http://deepagent-sop-mcp:8001/mcp`
+- All agent conversational state, execution traces, and HITL authorization audits are stored in the PostgreSQL database (`hitl-db:5432`).
