@@ -311,9 +311,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Event: Final Response Token Stream (Rendered Below Tools)
             else if (parsed.event === "token") {
-              fullText += parsed.chunk;
-              streamTextEl.innerHTML = formatMarkdown(fullText);
-              scrollToBottom();
+              const tokenText = parsed.token !== undefined ? parsed.token : (parsed.chunk !== undefined ? parsed.chunk : "");
+              if (tokenText) {
+                fullText += tokenText;
+                streamTextEl.innerHTML = formatMarkdown(fullText);
+                scrollToBottom();
+              }
             }
 
             // Event: Stream Completion

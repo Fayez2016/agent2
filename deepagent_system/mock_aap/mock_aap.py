@@ -230,6 +230,7 @@ def get_job_stdout(job_id):
         lines = [f"PLAY [Managed Fleet Reboot - ({len(targets)} Servers)] **************************"]
         lines.append("TASK [Issue Managed System Reboot & Await Connection] ***************************")
         for t in targets:
+            CONSOLE_RECOVERED_HOSTS.discard(t)
             elapsed = random.randint(32, 48)
             lines.append(f"changed: [{t}] => {{ \"msg\": \"Reboot completed cleanly.\", \"elapsed_sec\": {elapsed} }}")
         lines.append("\nPLAY RECAP *********************************************************************")

@@ -102,7 +102,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: Option
                         step = enrich_step_with_hitl(step)
                         intermediate_steps.append(step)
                         yield f"data: {json.dumps({'event': 'step', 'step': step})}\n\n"
-                        await asyncio.sleep(0.08)
+                        await asyncio.sleep(0.75)
                     response_text = orch_res.get("response_text", "Operation completed.")
                 else:
                     agent = await get_agent()
