@@ -196,8 +196,8 @@ async def execute_subagent_workflow_orchestrator(user_query: str):
             
         # 4. Out-of-band Console Recovery if any host timed out
         recovered_hosts = []
-        if "failed" in check_out.lower() or "timeout" in check_out.lower() or "soft hang" in check_out.lower():
-            hung = [h for h in target_hosts if h in check_out or "hang" in h or (len(target_hosts) >= 3 and h == target_hosts[2])]
+        if "failed:" in check_out.lower() or "unreachable:" in check_out.lower() or "timed out" in check_out.lower():
+            hung = [h for h in target_hosts if f"failed: [{h}]" in check_out or f"unreachable: [{h}]" in check_out or (f"[{h}]" in check_out and "failed" in check_out)]
             if hung and "ansible_console_power_on" in tools_dict:
                 hung_str = ",".join(hung)
                 res = await tools_dict["ansible_console_power_on"].ainvoke({"hostlist": hung_str})
@@ -349,12 +349,8 @@ async def execute_subagent_workflow_orchestrator(user_query: str):
 
         # Step 7: Check if any host timed out and trigger out-of-band Console Power On
         recovered_nodes = []
-        if "failed" in check_out_1.lower() or "timeout" in check_out_1.lower() or "soft hang" in check_out_1.lower():
-            # Identify hung nodes from tool output or pick 3rd node if simulated
-            hung_targets = [n for n in node1_list if n in check_out_1 or "03" in n or "hang" in n]
-            if not hung_targets and node1_list:
-                hung_targets = [node1_list[min(2, len(node1_list)-1)]]
-                
+        if "failed:" in check_out_1.lower() or "unreachable:" in check_out_1.lower() or "timed out" in check_out_1.lower():
+            hung_targets = [n for n in node1_list if f"failed: [{n}]" in check_out_1 or f"unreachable: [{n}]" in check_out_1 or (f"[{n}]" in check_out_1 and "failed" in check_out_1)]
             hung_str = ",".join(hung_targets)
             if "ansible_console_power_on" in tools_dict and hung_str:
                 res = await tools_dict["ansible_console_power_on"].ainvoke({"hostlist": hung_str})
