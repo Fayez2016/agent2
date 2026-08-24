@@ -4,7 +4,13 @@ from deepagents import create_deep_agent
 from langchain_openai import ChatOpenAI
 from app.config import settings
 from app.mcp_client import load_mcp_tools
-from app.prompts import load_system_prompt
+from app.prompts import (
+    load_system_prompt,
+    load_ha_patcher_prompt,
+    load_fleet_patcher_prompt,
+    load_diagnostics_prompt,
+    load_single_host_prompt
+)
 from app.domain.orchestrators.workflow_dispatcher import WorkflowDispatcher
 
 logger = logging.getLogger("AgentEngine")
@@ -12,7 +18,7 @@ logger = logging.getLogger("AgentEngine")
 _GLOBAL_TOOLS = None
 
 async def init_deep_agent():
-    """Initializes the Deep Agent harness with LangGraph create_deep_agent."""
+    """Initializes the Deep Agent harness with LangGraph create_deep_agent, subagents, and declarative skills."""
     global _GLOBAL_TOOLS
     ollama_v1_url = f"{settings.ollama_host}/v1" if not str(settings.ollama_host).endswith("/v1") else str(settings.ollama_host)
     logger.info(f"Initializing ChatOpenAI model '{settings.ollama_model}' at '{ollama_v1_url}'...")
@@ -28,26 +34,32 @@ async def init_deep_agent():
     _GLOBAL_TOOLS = tools
     system_prompt = load_system_prompt()
     
-    logger.info("Building Deep Agent harness with native create_deep_agent & subagents...")
+    logger.info("Building Deep Agent harness with native create_deep_agent, declarative skills, and subagents...")
     agent = create_deep_agent(
         model=llm,
         tools=tools,
         system_prompt=system_prompt,
+        skills=["/app/skills/"],
         subagents=[
             {
-                "name": "rhel-diagnostics",
-                "description": "Specialized subagent for cluster health pre-checks and node inspections",
-                "system_prompt": "You are the RHEL Cluster Diagnostics Subagent."
-            },
-            {
-                "name": "ha-cluster-patcher",
+                "name": "ha_cluster_patcher",
                 "description": "Specialized subagent for Red Hat HA Pacemaker/Corosync cluster rolling updates per SOP 2059253.",
-                "system_prompt": "You are the Red Hat HA Cluster Rolling Maintenance Subagent following SOP 2059253."
+                "system_prompt": load_ha_patcher_prompt()
             },
             {
-                "name": "fleet-patcher",
+                "name": "fleet_patcher",
                 "description": "Specialized subagent for enterprise fleet package updates, reboots, and IPMI console recoveries.",
-                "system_prompt": "You are the Enterprise Fleet Patching Subagent."
+                "system_prompt": load_fleet_patcher_prompt()
+            },
+            {
+                "name": "rhel_diagnostician",
+                "description": "Specialized subagent for cluster health pre-checks, node inspections, and triage.",
+                "system_prompt": load_diagnostics_prompt()
+            },
+            {
+                "name": "single_host_operator",
+                "description": "Specialized subagent for ad-hoc single-server package installations, reboots, and volume expansions.",
+                "system_prompt": load_single_host_prompt()
             }
         ]
     )
