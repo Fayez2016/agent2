@@ -535,6 +535,117 @@ input:checked + .slider:before {
   color: #c084fc;
 }
 
+.type-planning {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.type-filesystem {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+/* Dynamic Live Planning TODO Checklist Card */
+.planning-card {
+  margin: 10px 0;
+  background-color: #0c1322;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.planning-header {
+  padding: 10px 14px;
+  background-color: rgba(245, 158, 11, 0.12);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  font-size: 13px;
+  color: #fde68a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.todo-list {
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.todo-item.in_progress {
+  border-color: var(--accent-cyan);
+  background-color: rgba(56, 189, 248, 0.1);
+  color: #e0f2fe;
+}
+
+.todo-item.completed {
+  border-color: rgba(16, 185, 129, 0.4);
+  background-color: rgba(16, 185, 129, 0.08);
+  color: #94a3b8;
+}
+
+.todo-item.completed .todo-text {
+  text-decoration: line-through;
+}
+
+.todo-item.pending {
+  color: #64748b;
+}
+
+.todo-item.failed {
+  border-color: var(--status-danger);
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+
+.todo-status-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.pulse-icon {
+  animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+/* Filesystem Inspector Card */
+.fs-card {
+  margin: 10px 0;
+  background-color: #0c1322;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.fs-header {
+  padding: 10px 14px;
+  background-color: rgba(16, 185, 129, 0.1);
+  border-bottom: 1px solid rgba(16, 185, 129, 0.2);
+  font-size: 12px;
+  color: #6ee7b7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .trace-body {
   padding: 12px 14px;
   border-top: 1px solid var(--border-color);

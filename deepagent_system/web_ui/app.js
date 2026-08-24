@@ -388,12 +388,80 @@ document.addEventListener("DOMContentLoaded", () => {
         tempCard.remove();
       }
     }
+
+    // 1. Handle Planning Card In-Place Update (write_todos)
+    if (step.step_type === "planning" || step.tool_name === "write_todos") {
+      let planCard = container.querySelector(".planning-card");
+      if (planCard) {
+        planCard.querySelector(".todo-list").innerHTML = renderTodoListHtml(step.todos || step.tool_args?.todos || []);
+        return;
+      }
+    }
+
     const temp = document.createElement("div");
     temp.innerHTML = generateTraceCardHtml(step);
     container.appendChild(temp.firstElementChild);
   }
 
+  function renderTodoListHtml(todos) {
+    if (!todos || todos.length === 0) {
+      return `<div style="color: #94a3b8; font-size: 12px;"><em>Initializing operational checklist...</em></div>`;
+    }
+    return todos.map((t, idx) => {
+      const status = t.status || "pending";
+      let icon = "⏳";
+      if (status === "in_progress") icon = `<span class="pulse-icon">🔄</span>`;
+      else if (status === "completed") icon = "✅";
+      else if (status === "failed") icon = "❌";
+
+      const text = t.task || t.title || t.content || `Task #${t.id || idx + 1}`;
+      return `
+        <div class="todo-item ${status}">
+          <span class="todo-status-icon">${icon}</span>
+          <span class="todo-text">${escapeHtml(text)}</span>
+        </div>
+      `;
+    }).join("");
+  }
+
   function generateTraceCardHtml(step) {
+    // 1. Intercept Planning Tool: write_todos
+    if (step.step_type === "planning" || step.tool_name === "write_todos") {
+      const todos = step.todos || step.tool_args?.todos || [];
+      return `
+        <div>
+          <div class="planning-card">
+            <div class="planning-header">
+              <span>📋</span>
+              <strong>Live Execution Plan (TODOs)</strong>
+              <span class="trace-type-badge type-planning" style="margin-left: auto;">PLANNING</span>
+            </div>
+            <div class="todo-list">
+              ${renderTodoListHtml(todos)}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // 2. Intercept Filesystem Tools: read_file, ls, write_file, edit_file
+    if (step.step_type === "filesystem" || ["read_file", "write_file", "edit_file", "ls", "list_dir"].includes(step.tool_name)) {
+      const filePath = step.file_path || step.tool_args?.path || step.tool_args?.file_path || step.tool_args?.target_file || "skills/";
+      return `
+        <div>
+          <div class="fs-card">
+            <div class="fs-header">
+              <span class="trace-type-badge type-filesystem">FILESYSTEM</span>
+              <strong>${escapeHtml(step.tool_name || 'read_file')}</strong>: <code>${escapeHtml(filePath)}</code>
+            </div>
+            <div class="trace-body">
+              <pre class="trace-code">${escapeHtml(step.tool_output || 'SOP Skill Loaded Successfully.')}</pre>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     const isSubagent = step.step_type === "subagent_delegation";
     const badgeClass = isSubagent ? "type-subagent" : "type-mcp";
     const badgeLabel = isSubagent ? `🤖 SUBAGENT: ${step.target_subagent || 'AGENT'}` : `🛠️ TOOL: ${step.tool_name}`;
