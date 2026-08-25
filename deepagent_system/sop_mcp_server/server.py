@@ -135,6 +135,16 @@ def get_fleet_sop_markdown() -> str:
 
 # --- FastMCP Tools ---
 
+def normalize_sop_id(raw_id: str) -> str:
+    cleaned = str(raw_id).strip().upper().replace("-", "_").replace(" ", "_")
+    if "HA" in cleaned or "2059253" in cleaned or "ROLLING" in cleaned:
+        return "RHEL_HA_2059253"
+    elif "FLEET" in cleaned or "PATCH" in cleaned:
+        return "RHEL_FLEET_PATCHING"
+    elif "CONSOLE" in cleaned or "RECOVERY" in cleaned or "POWER" in cleaned:
+        return "RHEL_CONSOLE_RECOVERY"
+    return cleaned
+
 @mcp.tool()
 def sop_get_procedure(sop_id: str) -> Dict[str, Any]:
     """
@@ -142,12 +152,12 @@ def sop_get_procedure(sop_id: str) -> Dict[str, Any]:
     Args:
         sop_id: Unique identifier (e.g. 'RHEL_HA_2059253', 'RHEL_FLEET_PATCHING', 'RHEL_CONSOLE_RECOVERY').
     """
-    clean_id = sop_id.strip().upper()
-    if clean_id in SOP_CATALOG:
+    norm_id = normalize_sop_id(sop_id)
+    if norm_id in SOP_CATALOG:
         return {
             "status": "SUCCESS",
-            "sop_id": clean_id,
-            "procedure": SOP_CATALOG[clean_id]
+            "sop_id": norm_id,
+            "procedure": SOP_CATALOG[norm_id]
         }
     return {
         "status": "NOT_FOUND",
@@ -163,8 +173,8 @@ def sop_validate_prerequisites(sop_id: str, precheck_stdout: str) -> Dict[str, A
         sop_id: Unique identifier of the SOP being executed.
         precheck_stdout: Raw stdout from ansible_pcs_health_check or diagnostics tool.
     """
-    clean_id = sop_id.strip().upper()
-    if clean_id not in SOP_CATALOG:
+    norm_id = normalize_sop_id(sop_id)
+    if norm_id not in SOP_CATALOG:
         return {"status": "ERROR", "error": f"Invalid SOP ID: {sop_id}"}
         
     violations = []
@@ -180,7 +190,7 @@ def sop_validate_prerequisites(sop_id: str, precheck_stdout: str) -> Dict[str, A
     if violations:
         return {
             "status": "PREREQUISITE_FAILED",
-            "sop_id": clean_id,
+            "sop_id": norm_id,
             "passed": False,
             "violations": violations,
             "recommended_action": "Execute ansible_fix_pcs to clear failcounts and restore quorum balance."
@@ -188,7 +198,7 @@ def sop_validate_prerequisites(sop_id: str, precheck_stdout: str) -> Dict[str, A
         
     return {
         "status": "SUCCESS",
-        "sop_id": clean_id,
+        "sop_id": norm_id,
         "passed": True,
         "message": "All SOP safety prerequisites verified successfully. Proceed with rolling execution."
     }
@@ -202,16 +212,16 @@ def sop_generate_execution_plan(sop_id: str, entities: str, hitl_mode: str = "en
         entities: Comma-separated list of target cluster names or server hostnames.
         hitl_mode: Current HITL guardrail mode ('enforced' or 'autonomous').
     """
-    clean_id = sop_id.strip().upper()
-    if clean_id not in SOP_CATALOG:
+    norm_id = normalize_sop_id(sop_id)
+    if norm_id not in SOP_CATALOG:
         return {"status": "ERROR", "error": f"Invalid SOP ID: {sop_id}"}
         
-    sop = SOP_CATALOG[clean_id]
+    sop = SOP_CATALOG[norm_id]
     target_list = [e.strip() for e in entities.split(",") if e.strip()]
     
     return {
         "status": "SUCCESS",
-        "sop_id": clean_id,
+        "sop_id": norm_id,
         "title": sop["title"],
         "target_count": len(target_list),
         "target_entities": target_list,

@@ -7,17 +7,21 @@ description: Standard Operating Procedure for executing zero-downtime rolling up
 
 This skill provides step-by-step guidance for performing a zero-downtime rolling update (DNF packages, kernel updates, system reboots) across multi-cluster Red Hat HA Pacemaker/Corosync environments.
 
-## Execution Rules & Planning
-1. **Always Use Planning Tool**: Immediately call `write_todos` to initialize and track the SOP checklist across all target clusters.
-2. **Batch Processing**: When multiple clusters are targeted, execute each stage in batches across all clusters simultaneously to optimize maintenance windows.
-3. **Quorum Preservation**: NEVER reboot or patch Node 1 and Node 2 simultaneously. Complete Node 1 across all clusters first, ensure full cluster reintegration, and only then proceed to Node 2.
+## Execution Rules & Dynamic Discovery
+1. **Dynamic Topology Discovery**: DO NOT assume or hardcode node names. Call `ansible_pcs_health_check` on the cluster targets. Parse the stdout to extract the active members and resource locations (e.g. `Active members: nodeA, nodeB`).
+2. **Dynamic Wave Partitioning**:
+   - **Wave 1 (Active Nodes)**: All primary members hosting active resource groups.
+   - **Wave 2 (Peer Nodes)**: All secondary peer members.
+3. **Quorum Preservation**: NEVER patch or reboot Wave 1 and Wave 2 simultaneously. Complete Wave 1 across all clusters first, ensure full reintegration and quorum balance, and only then proceed to Wave 2.
+4. **Planning & Live Tracking**: Call `write_todos` to create the operational checklist tracking both waves and update each stage as it progresses.
+5. **Handling Anomalies**: If any node fails SSH connection check (`online: false`), invoke `ansible_console_power_on` (IPMI recovery) and re-verify before proceeding.
 
 ## Step-by-Step SOP Stages
 
-### Stage 1: Pre-Maintenance Health Check & Resource Discovery
+### Stage 1: Pre-Maintenance Health Check & Dynamic Topology Discovery
 - Tool: `ansible_pcs_health_check`
-- Arguments: `{"hostlist": "<comma-separated-cluster-or-host-names>"}`
-- Description: Validate that all cluster nodes are online, Corosync quorum is balanced, and STONITH fence devices are operational. Record any existing resource failures.
+- Arguments: `{"hostlist": "<cluster-names>"}`
+- Description: Validate that all clusters are QUORATE, STONITH is enabled, and discover all member node names. Initialize `write_todos` with discovered targets.
 
 ### Stage 2: Evacuate Node 1 (Standby)
 - Tool: `ansible_pcs_node_standby`

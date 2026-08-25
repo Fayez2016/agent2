@@ -11,15 +11,14 @@ from app.prompts import (
     load_diagnostics_prompt,
     load_single_host_prompt
 )
-from app.domain.orchestrators.workflow_dispatcher import WorkflowDispatcher
 
 logger = logging.getLogger("AgentEngine")
 
-_GLOBAL_TOOLS = None
+_GLOBAL_AGENT = None
 
 async def init_deep_agent():
     """Initializes the Deep Agent harness with LangGraph create_deep_agent, subagents, and declarative skills."""
-    global _GLOBAL_TOOLS
+    global _GLOBAL_AGENT
     ollama_v1_url = f"{settings.ollama_host}/v1" if not str(settings.ollama_host).endswith("/v1") else str(settings.ollama_host)
     logger.info(f"Initializing ChatOpenAI model '{settings.ollama_model}' at '{ollama_v1_url}'...")
     
@@ -30,8 +29,8 @@ async def init_deep_agent():
         temperature=settings.ollama_temperature
     )
     
+    # Load domain FastMCP tools from :8000 and :8001 (FastMCP does not supply filesystem tools)
     tools = await load_mcp_tools()
-    _GLOBAL_TOOLS = tools
     system_prompt = load_system_prompt()
     
     logger.info("Building Deep Agent harness with native create_deep_agent, declarative skills, and subagents...")
@@ -64,15 +63,5 @@ async def init_deep_agent():
         ]
     )
     logger.info("Deep Agent harness initialized successfully.")
+    _GLOBAL_AGENT = agent
     return agent
-
-async def execute_subagent_workflow_orchestrator(user_query: str) -> Dict[str, Any]:
-    """
-    Entrypoint for orchestrating user queries through the decoupled domain workflow layer.
-    """
-    global _GLOBAL_TOOLS
-    if not _GLOBAL_TOOLS:
-        _GLOBAL_TOOLS = await load_mcp_tools()
-        
-    tools_dict = {t.name: t for t in _GLOBAL_TOOLS}
-    return await WorkflowDispatcher.dispatch(user_query=user_query, tools_dict=tools_dict)
