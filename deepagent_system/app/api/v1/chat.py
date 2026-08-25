@@ -7,21 +7,13 @@ from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.config import settings
-from app.agent_engine import init_deep_agent
+from app.agent_engine import get_agent, init_deep_agent
 from app.infrastructure.db.thread_repository import ThreadRepository
 from app.infrastructure.db.hitl_repository import HitlRepository
 from app.infrastructure.db.database import DatabasePool
 
 logger = logging.getLogger("ChatRouter")
 router = APIRouter(prefix="/v1/chat", tags=["Chat"])
-
-_AGENT_INSTANCE = None
-
-async def get_agent():
-    global _AGENT_INSTANCE
-    if not _AGENT_INSTANCE:
-        _AGENT_INSTANCE = await init_deep_agent()
-    return _AGENT_INSTANCE
 
 class Message(BaseModel):
     role: str
@@ -176,11 +168,6 @@ async def chat_completions(request: ChatCompletionRequest, authorization: Option
                                     yield f"data: {json.dumps({'event': 'step', 'step': step, 'step_id': step['step_id']})}\n\n"
                                     await asyncio.sleep(0.5)  # Responsive pacing for visual observation
 
-                                    # Break immediately after the terminal reporting stage
-                                    if t_name == "ansible_send_email":
-                                        logger.info("Terminal step 'ansible_send_email' reached. Concluding graph execution.")
-                                        loop_broken = True
-                                        break
                                 if loop_broken:
                                     break
 
