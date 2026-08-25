@@ -604,7 +604,13 @@ document.addEventListener("DOMContentLoaded", () => {
       </div>
     `;
 
-    lastAssistantRow.appendChild(hitlCard);
+    // Place the HITL card directly above the latest trace card (or inside it)
+    const latestTraceContainer = lastAssistantRow.querySelector("[id^='trace-step-container-']:last-child");
+    if (latestTraceContainer) {
+      latestTraceContainer.insertBefore(hitlCard, latestTraceContainer.firstChild);
+    } else {
+      lastAssistantRow.appendChild(hitlCard);
+    }
     scrollToBottom();
   }
 

@@ -119,11 +119,17 @@ async def chat_completions(request: ChatCompletionRequest, authorization: Option
                                     t_args = tc.get("args", {})
                                     sig = (t_name, json.dumps(t_args, sort_keys=True))
                                     
-                                    # Prevent local LLM infinite loop on duplicate tool calls
+                                    # Prevent local LLM duplicate tool loops and repetitive single-shot email dispatches
                                     if sig in seen_signatures and t_name != "write_todos":
                                         logger.info(f"Duplicate tool call '{t_name}' detected. Breaking graph loop to synthesize response.")
                                         loop_broken = True
                                         break
+
+                                    if t_name == "ansible_send_email" and any(s.get("tool_name") == "ansible_send_email" for s in intermediate_steps):
+                                        logger.info("Duplicate 'ansible_send_email' detected in same turn. Suppressing and concluding graph loop.")
+                                        loop_broken = True
+                                        break
+
                                     seen_signatures.add(sig)
                                     
                                     # Intercept Dynamic Planning Tool (write_todos)
