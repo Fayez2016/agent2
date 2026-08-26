@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  deepagent-langgraph-server:
+    image: localhost/deepagent-core:latest
+    container_name: deepagent-langgraph-server
+    command: ["langgraph", "dev", "--host", "0.0.0.0", "--port", "8123"]
+    ports:
+      - "8123:8123"
+    environment:
+      - LLM_PROVIDER=openrouter
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+      - OPENROUTER_MODEL=qwen/qwen-2.5-72b-instruct
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_BASE_URL=https://api.groq.com/openai/v1
+      - GROQ_MODEL=qwen/qwen3.6-27b
+      - ANSIBLE_BACKEND_MODE=mock
+      - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
+      - MCP_ANSIBLE_URL=http://ansible-mcp:8000/mcp
+      - MCP_SOP_URL=http://sop-mcp:8001/mcp
+    volumes:
+      - ./deepagent_system/app:/app/app:Z
+      - ./deepagent_system/skills:/app/skills:Z
+      - ./deepagent_system/langgraph.json:/app/langgraph.json:Z
+    networks:
+      - deepagent_standalone_net
+
+  deepagent-ui-official:
+    build:
+      context: ./deep-agents-ui
+      dockerfile: Dockerfile
+    image: localhost/deepagents-ui-official:test
+    container_name: deepagent-ui-official
+    ports:
+      - "3001:3000"
+    environment:
+      - NEXT_PUBLIC_LANGGRAPH_API_URL=http://localhost:8123
+      - NEXT_PUBLIC_ASSISTANT_ID=linux_operator
+    depends_on:
+      - deepagent-langgraph-server
+    networks:
+      - deepagent_standalone_net
+
+networks:
+  deepagent_standalone_net:
+    external: true

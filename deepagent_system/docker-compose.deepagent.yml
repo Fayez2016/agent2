@@ -38,22 +38,6 @@ services:
       - deepagent_net
     restart: unless-stopped
 
-  hitl-web:
-    build:
-      context: ../hitl_web
-    image: agent2_hitl-web:latest
-    container_name: deepagent-hitl-web
-    environment:
-      - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
-      - SECRET_KEY=hitl-secret-key-123
-    ports:
-      - "5001:5000"
-    depends_on:
-      - db
-    networks:
-      - deepagent_net
-    restart: unless-stopped
-
   ansible-mcp:
     build:
       context: ..
@@ -95,6 +79,13 @@ services:
     ports:
       - "8642:8642"
     environment:
+      - LLM_PROVIDER=openrouter
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+      - OPENROUTER_MODEL=qwen/qwen-2.5-72b-instruct
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_BASE_URL=https://api.groq.com/openai/v1
+      - GROQ_MODEL=qwen/qwen3.6-27b
       - ANSIBLE_BACKEND_MODE=mock
       - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_MODEL=qwen2.5:3b
@@ -107,7 +98,6 @@ services:
       - ../SOUL.md:/home/fayez/agent2/SOUL.md:ro
       - ../SOP_RHEL_FLEET_PATCHING.md:/home/fayez/agent2/SOP_RHEL_FLEET_PATCHING.md:ro
     depends_on:
-      - ollama
       - ansible-mcp
       - sop-mcp
     networks:

@@ -13,3 +13,5 @@ pydantic
 pydantic-settings
 python-dotenv
 requests
+psycopg2-binary
+langgraph-cli[inmem]

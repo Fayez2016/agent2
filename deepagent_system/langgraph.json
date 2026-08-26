@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "linux_operator": "./app/agent_engine.py:init_deep_agent"
+  },
+  "env": ".env"
+}

@@ -28,6 +28,13 @@ class DeepAgentSettings(BaseSettings):
     db_pass: str = Field("secret456", description="Database password")
 
     # 3. LLM Inference Engine
+    llm_provider: str = Field("openrouter", description="LLM provider: 'openrouter', 'groq', or 'ollama'")
+    openrouter_api_key: str = Field("", description="OpenRouter API Key")
+    openrouter_base_url: str = Field("https://openrouter.ai/api/v1", description="OpenRouter API Base URL")
+    openrouter_model: str = Field("qwen/qwen-2.5-72b-instruct", description="OpenRouter Model Tag")
+    groq_api_key: str = Field("", description="Groq API Key")
+    groq_base_url: str = Field("https://api.groq.com/openai/v1", description="Groq API Base URL")
+    groq_model: str = Field("qwen/qwen3.6-27b", description="Groq Model Tag")
     ollama_host: str = Field("http://ollama:11434", description="Ollama API base URL")
     ollama_model: str = Field("qwen2.5:3b", description="Model tag")
     ollama_temperature: float = Field(0.0, description="Model inference temperature")
@@ -70,6 +77,10 @@ settings = DeepAgentSettings()
 # Backward compatibility module-level exports
 API_PORT = settings.api_port
 API_SERVER_KEY = settings.api_server_key
+LLM_PROVIDER = settings.llm_provider
+GROQ_API_KEY = settings.groq_api_key
+GROQ_BASE_URL = settings.groq_base_url
+GROQ_MODEL = settings.groq_model
 OLLAMA_HOST = settings.ollama_host
 OLLAMA_MODEL = settings.ollama_model
 MCP_SERVER_URL = settings.mcp_server_url

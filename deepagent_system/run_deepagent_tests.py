@@ -89,16 +89,16 @@ def test_health_probes():
         print(f"  ✗ Deep Agent Core API error: {e}")
         success = False
 
-    # Probe 2: HITL Web Approval Portal
+    # Probe 2: HITL REST API & Approval Engine
     try:
-        r = requests.get(HITL_URL, timeout=5)
+        r = requests.get("http://localhost:8642/v1/hitl/pending", timeout=5)
         if r.status_code == 200:
-            print("  ✓ HITL Web Portal (:5001): HEALTHY")
+            print("  ✓ HITL In-App Approval REST Engine (:8642/v1/hitl): HEALTHY")
         else:
-            print(f"  ✗ HITL Web Portal returned status {r.status_code}")
+            print(f"  ✗ HITL In-App API returned status {r.status_code}")
             success = False
     except Exception as e:
-        print(f"  ✗ HITL Web Portal error: {e}")
+        print(f"  ✗ HITL In-App API error: {e}")
         success = False
 
     # Probe 3: React Web UI Control Panel
