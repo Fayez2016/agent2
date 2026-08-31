@@ -112,6 +112,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      - ./web_ui:/app:Z
     depends_on:
       - deepagent
     networks:
