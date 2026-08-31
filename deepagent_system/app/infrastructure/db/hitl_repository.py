@@ -95,3 +95,17 @@ class HitlRepository:
                 }
                 return res
             return None
+
+    @staticmethod
+    def purge_all() -> int:
+        with DatabasePool.get_cursor(commit=True) as cursor:
+            cursor.execute("DELETE FROM hitl_requests;")
+            count = cursor.rowcount
+            cursor.execute("ALTER SEQUENCE hitl_requests_id_seq RESTART WITH 1;")
+            return count
+
+    @staticmethod
+    def purge_older_than(days: int) -> int:
+        with DatabasePool.get_cursor(commit=True) as cursor:
+            cursor.execute("DELETE FROM hitl_requests WHERE requested_at < NOW() - (INTERVAL '1 day' * %s);", (days,))
+            return cursor.rowcount

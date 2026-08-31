@@ -63,6 +63,24 @@ class ThreadRepository:
             return cursor.rowcount > 0
 
     @staticmethod
+    def purge_all() -> Dict[str, int]:
+        with DatabasePool.get_cursor(commit=True) as cursor:
+            cursor.execute("DELETE FROM conversation_messages;")
+            msg_count = cursor.rowcount
+            cursor.execute("DELETE FROM conversation_threads;")
+            thr_count = cursor.rowcount
+            return {"deleted_messages": msg_count, "deleted_threads": thr_count}
+
+    @staticmethod
+    def purge_older_than(days: int) -> Dict[str, int]:
+        with DatabasePool.get_cursor(commit=True) as cursor:
+            cursor.execute("DELETE FROM conversation_messages WHERE created_at < NOW() - (INTERVAL '1 day' * %s);", (days,))
+            msg_count = cursor.rowcount
+            cursor.execute("DELETE FROM conversation_threads WHERE updated_at < NOW() - (INTERVAL '1 day' * %s);", (days,))
+            thr_count = cursor.rowcount
+            return {"deleted_messages": msg_count, "deleted_threads": thr_count}
+
+    @staticmethod
     def get_messages(thread_id: str) -> List[Dict[str, Any]]:
         with DatabasePool.get_cursor() as cursor:
             cursor.execute(

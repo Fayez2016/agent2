@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const threadsList = document.getElementById("threads-list");
   const newChatBtn = document.getElementById("new-chat-btn");
   const exportReportBtn = document.getElementById("export-report-btn");
+  const purgeDbBtn = document.getElementById("purge-db-btn");
   const hitlModeToggle = document.getElementById("hitl-mode-toggle");
   const modeStatusText = document.getElementById("mode-status-text");
   
@@ -105,6 +106,32 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- Thread & Conversation Persistence ---
+  if (purgeDbBtn) {
+    purgeDbBtn.addEventListener("click", async () => {
+      const confirmPurge = confirm("⚠️ Are you sure you want to clean up the database?\n\nThis will purge all previous conversational threads, message traces, and historical HITL test records while keeping user accounts and settings.");
+      if (!confirmPurge) return;
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/settings/db/cleanup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ purge_threads: true, purge_hitl: true, keep_days: 0 })
+        });
+        const data = await resp.json();
+        if (data.status === "success") {
+          alert(`✅ Database Cleaned Successfully!\n\nDeleted Threads: ${data.stats.deleted_threads}\nDeleted Messages: ${data.stats.deleted_messages}\nDeleted HITL Records: ${data.stats.deleted_hitl_requests}`);
+          chatStream.innerHTML = "";
+          currentThreadId = null;
+          await loadThreads();
+          await loadAuditHistory();
+        } else {
+          alert("❌ Cleanup failed: " + JSON.stringify(data));
+        }
+      } catch (err) {
+        alert("❌ Error cleaning database: " + err.message);
+      }
+    });
+  }
+
   newChatBtn.addEventListener("click", createNewSession);
 
   async function createNewSession() {
