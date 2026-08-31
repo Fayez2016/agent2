@@ -216,15 +216,17 @@ def get_job_stdout(job_id):
         lines = [f"PLAY [Patch Fleet - DNF Package Updates ({len(targets)} Servers)] ****************"]
         lines.append("TASK [Apply Security & Enhancement Packages via DNF] ***************************")
         for t in targets:
-            # Simulate failure if target has 'err', 'fail', 'dnf-err', or specifically simulated node 'cluster3_node1'
-            if any(k in t.lower() for k in ["err", "fail", "dnf", "pkg_fail", "cluster3_node1"]):
+            # Simulate failure if target has 'err', 'fail', 'dnf', or specifically simulated test targets 'cluster3_node1', 'ha_cluster3_node1', 'rhel-prod-04'
+            is_patch_failure = any(k in t.lower() for k in ["err", "fail", "dnf", "pkg_fail", "cluster3_node1", "ha_cluster3_node1", "rhel-prod-04", "prod-04"])
+            if is_patch_failure:
                 lines.append(f"failed: [{t}] => {{ \"stage\": \"Patching\", \"error\": \"DNF Transaction Error: GPG key verification failed or package dependency conflict on {t}.\", \"reboot_required\": false }}")
             else:
                 pkgs = random.randint(12, 28)
                 lines.append(f"changed: [{t}] => {{ \"packages_updated\": {pkgs}, \"reboot_required\": true, \"status\": \"applied\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
-            if any(k in t.lower() for k in ["err", "fail", "dnf", "pkg_fail", "cluster3_node1"]):
+            is_patch_failure = any(k in t.lower() for k in ["err", "fail", "dnf", "pkg_fail", "cluster3_node1", "ha_cluster3_node1", "rhel-prod-04", "prod-04"])
+            if is_patch_failure:
                 lines.append(f"{t:30} : ok=1    changed=0    unreachable=0    failed=1")
             else:
                 lines.append(f"{t:30} : ok=3    changed=1    unreachable=0    failed=0")
@@ -248,8 +250,8 @@ def get_job_stdout(job_id):
         lines = [f"PLAY [Check Host Online - TCP Port 22 Verification ({len(targets)} Targets)] ****"]
         lines.append("TASK [Probe SSH Port 22 & Validate OS Uptime] **********************************")
         for t in targets:
-            # Simulate a soft-hang on hosts with 'hang' or simulated node 'cluster7_node1' before console recovery
-            is_explicit_hang = ("hang" in t.lower() or "cluster7_node1" in t.lower()) and (t not in CONSOLE_RECOVERED_HOSTS)
+            # Simulate a soft-hang on hosts with 'hang', 'cluster7_node1', 'ha_cluster7_node1', or 'rhel-prod-08' before console recovery
+            is_explicit_hang = ("hang" in t.lower() or "cluster7_node1" in t.lower() or "ha_cluster7_node1" in t.lower() or "rhel-prod-08" in t.lower() or "prod-08" in t.lower()) and (t not in CONSOLE_RECOVERED_HOSTS)
             if is_explicit_hang:
                 lines.append(f"failed: [{t}] => {{ \"online\": false, \"stage\": \"Reboot Verification\", \"error\": \"SSH Port 22 connection timed out (Kernel soft hang detected on {t}).\" }}")
             else:
@@ -258,7 +260,8 @@ def get_job_stdout(job_id):
                 lines.append(f"ok: [{t}] => {{ \"online\": true, \"uptime\": \"{uptime}\", \"boot_method\": \"{method}\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
-            if ("hang" in t.lower() or "cluster7_node1" in t.lower()) and (t not in CONSOLE_RECOVERED_HOSTS):
+            is_hang = ("hang" in t.lower() or "cluster7_node1" in t.lower() or "ha_cluster7_node1" in t.lower() or "rhel-prod-08" in t.lower() or "prod-08" in t.lower()) and (t not in CONSOLE_RECOVERED_HOSTS)
+            if is_hang:
                 lines.append(f"{t:30} : ok=1    changed=0    unreachable=1    failed=1")
             else:
                 lines.append(f"{t:30} : ok=2    changed=0    unreachable=0    failed=0")
