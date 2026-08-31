@@ -50,28 +50,55 @@ async def init_deep_agent():
             temperature=settings.ollama_temperature,
         )
     
-    # Load domain FastMCP tools from :8000 and :8001 (FastMCP does not supply filesystem tools)
-    tools = await load_mcp_tools()
-    system_prompt = load_system_prompt()
-    
-    # Root agent acts as high-level orchestrator; subagents carry domain tools
-    root_tools = [t for t in tools if t.name in ("ansible_get_server_info", "ansible_send_email", "sop_get_procedure")]
-    ha_tools = [t for t in tools if t.name.startswith("ansible_pcs") or t.name in ("ansible_patch_fleet", "ansible_reboot_fleet", "ansible_reboot_host", "ansible_send_email", "hitl_request_approval")]
-    fleet_tools = [t for t in tools if t.name in ("ansible_patch_fleet", "ansible_reboot_fleet", "ansible_reboot_host", "ansible_get_server_info", "ansible_send_email", "hitl_request_approval")]
-    diag_tools = [t for t in tools if t.name.startswith("ansible_pcs") or t.name in ("ansible_get_server_info", "hitl_request_approval")]
-    single_tools = [t for t in tools if t.name in ("ansible_install_package", "ansible_expand_fs", "ansible_reboot_host", "ansible_get_server_info", "hitl_request_approval")]
+    # Load domain FastMCP tools from dynamically registered database endpoints
+    tools = await load_mcp_tools(domain_scope="linux")
+    tools_map = {t.name: t for t in tools}
 
     # Dynamically fetch configured recipient email from DB
     from app.infrastructure.db.hitl_repository import HitlRepository
+    from app.infrastructure.db.agent_repository import AgentRepository
     notification_email = HitlRepository.get_setting("notification_email", "fayez.soufyani@gmail.com")
 
-    logger.info(f"Building Deep Agent harness with native create_deep_agent, declarative skills, and subagents (Recipient: {notification_email})...")
-    agent = create_deep_agent(
-        model=llm,
-        tools=root_tools,
-        system_prompt=system_prompt,
-        skills=["/app/skills/"],
-        subagents=[
+    # 1. Load Main Agent Definition from PostgreSQL
+    db_agent = AgentRepository.get_agent_by_key("linux_sre")
+    system_prompt = db_agent["system_prompt"] if db_agent else load_system_prompt()
+
+    # 2. Build Subagents Dynamically from Database
+    subagent_configs = []
+    if db_agent and db_agent.get("subagents"):
+        for sub in db_agent["subagents"]:
+            sub_tools = []
+            bindings = sub.get("tool_bindings", [])
+            for b in bindings:
+                if b in tools_map:
+                    sub_tools.append(tools_map[b])
+                elif b.endswith("*"):
+                    prefix = b[:-1]
+                    sub_tools.extend([t for t in tools if t.name.startswith(prefix)])
+            
+            # Ensure email recipient dynamic injection if placeholder or standard
+            sub_prompt = sub["system_prompt"]
+            if "{recipient_email}" in sub_prompt:
+                sub_prompt = sub_prompt.replace("{recipient_email}", notification_email)
+
+            subagent_configs.append({
+                "name": sub["name"],
+                "description": sub["description"],
+                "system_prompt": sub_prompt,
+                "tools": sub_tools,
+                "skills": [sub.get("skills_path", "/app/skills/")]
+            })
+        logger.info(f"Loaded {len(subagent_configs)} subagents dynamically from PostgreSQL for agent 'linux_sre'.")
+
+    # Fallback to defaults if DB records unavailable
+    if not subagent_configs:
+        root_tools = [t for t in tools if t.name in ("ansible_get_server_info", "ansible_send_email", "sop_get_procedure")]
+        ha_tools = [t for t in tools if t.name.startswith("ansible_pcs") or t.name in ("ansible_patch_fleet", "ansible_reboot_fleet", "ansible_reboot_host", "ansible_send_email", "hitl_request_approval")]
+        fleet_tools = [t for t in tools if t.name in ("ansible_patch_fleet", "ansible_reboot_fleet", "ansible_reboot_host", "ansible_get_server_info", "ansible_send_email", "hitl_request_approval")]
+        diag_tools = [t for t in tools if t.name.startswith("ansible_pcs") or t.name in ("ansible_get_server_info", "hitl_request_approval")]
+        single_tools = [t for t in tools if t.name in ("ansible_install_package", "ansible_expand_fs", "ansible_reboot_host", "ansible_get_server_info", "hitl_request_approval")]
+
+        subagent_configs = [
             {
                 "name": "ha_cluster_patcher",
                 "description": "Specialized subagent for Red Hat HA Pacemaker/Corosync cluster rolling updates per SOP 2059253.",
@@ -101,8 +128,18 @@ async def init_deep_agent():
                 "skills": ["/app/skills/"]
             }
         ]
+
+    root_tools = [t for t in tools if t.name in ("ansible_get_server_info", "ansible_send_email", "sop_get_procedure")]
+
+    logger.info(f"Building Deep Agent harness from DB records (Recipient: {notification_email})...")
+    agent = create_deep_agent(
+        model=llm,
+        tools=root_tools,
+        system_prompt=system_prompt,
+        skills=["/app/skills/"],
+        subagents=subagent_configs
     )
-    logger.info("Deep Agent harness initialized successfully.")
+    logger.info("Deep Agent harness initialized successfully from PostgreSQL.")
     _GLOBAL_AGENT = agent
     return agent
 

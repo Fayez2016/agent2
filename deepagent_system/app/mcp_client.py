@@ -2,46 +2,45 @@ import os
 import json
 import asyncio
 import logging
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 from app.config import settings
 
 logger = logging.getLogger("MCPClient")
 
-def load_mcp_servers_config() -> Dict[str, str]:
+def load_mcp_servers_config(domain_scope: Optional[str] = None) -> Dict[str, str]:
     """
-    Discovers all MCP server endpoints from .mcp.json or uses settings defaults.
-    Supports MultiServerMCPClient topology (Ansible Execution + SOP Knowledge).
+    Discovers all MCP server endpoints dynamically from PostgreSQL database (mcp_servers table),
+    falling back to .mcp.json or environment settings.
     """
-    servers = {
-        "ansible": settings.ansible_mcp_url,
-        "sop": settings.sop_mcp_url
-    }
-    
-    mcp_config_path = "/app/.mcp.json" if os.path.exists("/app/.mcp.json") else ".mcp.json"
-    if os.path.exists(mcp_config_path):
-        try:
-            with open(mcp_config_path, "r") as f:
-                data = json.load(f)
-                configured_servers = data.get("mcpServers", {})
-                for name, s_cfg in configured_servers.items():
-                    url = s_cfg.get("url")
-                    if url:
-                        key = "ansible" if "ansible" in name else ("sop" if "sop" in name else name)
-                        servers[key] = url
-                        logger.info(f"Discovered MCP server '{key}' -> '{url}' from .mcp.json")
-        except Exception as e:
-            logger.warning(f"Error reading .mcp.json: {e}")
-            
+    servers = {}
+
+    # 1. Primary Source: PostgreSQL mcp_servers table
+    try:
+        from app.infrastructure.db.agent_repository import AgentRepository
+        db_servers = AgentRepository.get_all_mcp_servers(domain_scope=domain_scope, only_active=True)
+        for s in db_servers:
+            servers[s["name"]] = s["url"]
+            logger.info(f"Loaded active MCP server from DB: '{s['name']}' ({s.get('domain_scope', 'global')}) -> '{s['url']}'")
+    except Exception as e:
+        logger.warning(f"Could not load MCP servers from database: {e}")
+
+    # 2. Fallback / Defaults if DB query empty
+    if not servers:
+        servers = {
+            "ansible": settings.ansible_mcp_url,
+            "sop": settings.sop_mcp_url
+        }
+
     return servers
 
-async def load_mcp_tools(server_url: str = None) -> List[Any]:
+async def load_mcp_tools(server_url: str = None, domain_scope: Optional[str] = None) -> List[Any]:
     """
     Loads tools from multiple specialized FastMCP servers simultaneously
     using official MultiServerMCPClient over streamable HTTP transport.
     """
     try:
         from langchain_mcp_adapters.client import MultiServerMCPClient
-        servers_config = load_mcp_servers_config()
+        servers_config = load_mcp_servers_config(domain_scope=domain_scope)
         
         # Build multi-server dictionary
         client_dict = {}
