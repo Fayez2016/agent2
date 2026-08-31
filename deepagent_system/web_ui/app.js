@@ -593,30 +593,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function startPendingHitlPolling() {
     setInterval(async () => {
-      // Pause polling during active execution to prevent worker thread congestion
-      if (currentMode !== "enforced" || isCurrentlyStreaming) return;
+      // In enforced mode, we MUST poll to detect and render pending HITL approval requests
+      if (currentMode !== "enforced") return;
       try {
         const resp = await fetch(`${BASE_URL}/v1/hitl/pending`);
         const data = await resp.json();
         const pending = data.pending || [];
 
         if (pending.length > 0) {
-          const req = pending[0];
-          activePendingRequestId = req.id;
-          renderPendingInlineHitlCard(req);
+          pending.forEach((req) => {
+            renderPendingInlineHitlCard(req);
+          });
         }
       } catch (e) {
         // quiet poll
       }
-    }, 4000); // 4s interval is optimal and avoids thread starvation
+    }, 1500);
   }
 
   function renderPendingInlineHitlCard(req) {
     const existing = document.getElementById(`inline-hitl-${req.id}`);
     if (existing) return;
 
-    const lastAssistantRow = chatStream.querySelector(".message-row.assistant:last-child .message-bubble .trace-container");
-    if (!lastAssistantRow) return;
+    let targetContainer = chatStream.querySelector(".message-row.assistant:last-child .message-bubble .trace-container");
+    if (!targetContainer) {
+      targetContainer = chatStream;
+    }
 
     const hitlCard = document.createElement("div");
     hitlCard.id = `inline-hitl-${req.id}`;
@@ -636,13 +638,8 @@ document.addEventListener("DOMContentLoaded", () => {
       </div>
     `;
 
-    // Place the HITL card directly above the latest trace card (or inside it)
-    const latestTraceContainer = lastAssistantRow.querySelector("[id^='trace-step-container-']:last-child");
-    if (latestTraceContainer) {
-      latestTraceContainer.insertBefore(hitlCard, latestTraceContainer.firstChild);
-    } else {
-      lastAssistantRow.appendChild(hitlCard);
-    }
+    // Place the HITL card directly into the container
+    targetContainer.appendChild(hitlCard);
     scrollToBottom();
   }
 
