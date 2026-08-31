@@ -33,6 +33,34 @@ async def update_hitl_mode(req: ModeUpdateRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update hitl_mode: {e}")
 
+class SettingUpdateRequest(BaseModel):
+    value: str
+
+@router.get("/notification_email")
+async def get_notification_email():
+    """Returns configured SRE report recipient email."""
+    try:
+        email = HitlRepository.get_setting("notification_email", "fayez.soufyani@gmail.com")
+        return {"email": email}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch notification_email: {e}")
+
+@router.post("/notification_email")
+async def update_notification_email(req: SettingUpdateRequest):
+    """Updates SRE report recipient email in database."""
+    email = req.value.strip()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email address format")
+    try:
+        success = HitlRepository.set_setting("notification_email", email)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to persist email in DB")
+        return {"status": "success", "email": email}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update notification_email: {e}")
+
 class DBCleanupRequest(BaseModel):
     purge_threads: bool = True
     purge_hitl: bool = True

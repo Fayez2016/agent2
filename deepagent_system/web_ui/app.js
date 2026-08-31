@@ -43,8 +43,55 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function initApp() {
     await fetchHitlMode();
+    await fetchNotificationEmail();
     await loadThreads();
     startPendingHitlPolling();
+  }
+
+  // --- SRE Report Recipient Email Settings ---
+  const sreEmailInput = document.getElementById("sre-email-input");
+  const saveEmailBtn = document.getElementById("save-email-btn");
+
+  async function fetchNotificationEmail() {
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/settings/notification_email`);
+      const data = await resp.json();
+      if (data.email && sreEmailInput) {
+        sreEmailInput.value = data.email;
+      }
+    } catch (e) {
+      console.warn("Failed to fetch notification email", e);
+    }
+  }
+
+  if (saveEmailBtn) {
+    saveEmailBtn.addEventListener("click", async () => {
+      const email = (sreEmailInput.value || "").trim();
+      if (!email || !email.includes("@")) {
+        alert("Please enter a valid email address.");
+        return;
+      }
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/settings/notification_email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: email })
+        });
+        const data = await resp.json();
+        if (data.status === "success") {
+          saveEmailBtn.textContent = "✓ Saved";
+          saveEmailBtn.style.background = "#10b981";
+          setTimeout(() => {
+            saveEmailBtn.textContent = "Save";
+            saveEmailBtn.style.background = "var(--accent-color, #3b82f6)";
+          }, 2000);
+        } else {
+          alert("Failed to save email: " + JSON.stringify(data));
+        }
+      } catch (err) {
+        alert("Error saving notification email: " + err.message);
+      }
+    });
   }
 
   // --- View Switcher ---

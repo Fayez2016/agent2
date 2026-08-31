@@ -10,32 +10,40 @@ class HitlRepository:
     """Repository for Human-in-the-Loop approval requests, decisions, and guardrail modes."""
 
     @staticmethod
-    def get_guardrail_mode() -> str:
+    def get_setting(key: str, default: str = "") -> str:
         try:
             with DatabasePool.get_cursor() as cursor:
-                cursor.execute("SELECT value FROM system_settings WHERE key = 'hitl_mode';")
+                cursor.execute("SELECT value FROM system_settings WHERE key = %s;", (key,))
                 row = cursor.fetchone()
-                return row["value"] if row and "value" in row else "enforced"
+                return row["value"] if row and "value" in row else default
         except Exception as e:
-            logger.warning(f"Failed to fetch hitl_mode from DB, defaulting to enforced: {e}")
-            return "enforced"
+            logger.warning(f"Failed to fetch setting '{key}' from DB: {e}")
+            return default
 
     @staticmethod
-    def set_guardrail_mode(mode: str) -> bool:
+    def set_setting(key: str, value: str) -> bool:
         try:
             with DatabasePool.get_cursor(commit=True) as cursor:
                 cursor.execute(
                     """
                     INSERT INTO system_settings (key, value, updated_at)
-                    VALUES ('hitl_mode', %s, NOW())
+                    VALUES (%s, %s, NOW())
                     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
                     """,
-                    (mode,)
+                    (key, value)
                 )
             return True
         except Exception as e:
-            logger.error(f"Failed to update hitl_mode in DB: {e}")
+            logger.error(f"Failed to update setting '{key}' in DB: {e}")
             return False
+
+    @staticmethod
+    def get_guardrail_mode() -> str:
+        return HitlRepository.get_setting("hitl_mode", "enforced")
+
+    @staticmethod
+    def set_guardrail_mode(mode: str) -> bool:
+        return HitlRepository.set_setting("hitl_mode", mode)
 
     @staticmethod
     def get_pending_requests() -> List[Dict[str, Any]]:

@@ -14,11 +14,11 @@ def load_system_prompt() -> str:
         "- Do not loop or call identical tools repeatedly with the exact same arguments."
     )
 
-def load_ha_patcher_prompt() -> str:
+def load_ha_patcher_prompt(recipient_email: str = "fayez.soufyani@gmail.com") -> str:
     return (
         "You are the Red Hat HA Cluster Rolling Maintenance Subagent following SOP 2059253.\n\n"
         "MANDATORY PROCEDURAL DIRECTIVES:\n"
-        "1. STEP 1 - DYNAMIC TOPOLOGY DISCOVERY: Call `ansible_pcs_health_check` to discover all cluster member nodes (e.g. `cluster1_node1, cluster1_node2, ..., cluster10_node2`). Group primary active members into Wave 1 (`clusterX_node1`) and secondary peer members into Wave 2 (`clusterX_node2`).\n"
+        "1. STEP 1 - DYNAMIC TOPOLOGY DISCOVERY: Call `ansible_pcs_health_check` to discover all cluster member nodes (pattern: `ha_cluster1_node1, ha_cluster1_node2, ..., ha_cluster10_node2`). Dynamically partition nodes into Wave 1 (`ha_clusterX_node1` active nodes) and Wave 2 (`ha_clusterX_node2` peer nodes).\n"
         "2. STEP 2 - WAVE 1 EXECUTION (PRIMARY NODES):\n"
         "   - Standby Wave 1: Call `ansible_pcs_node_standby` with comma-separated Wave 1 node names.\n"
         "   - Patch Wave 1: Call `ansible_patch_fleet` with comma-separated Wave 1 node names.\n"
@@ -29,20 +29,23 @@ def load_ha_patcher_prompt() -> str:
         "   - If any cluster's Node 1 fails patching, reboot, or verification, DO NOT proceed to Wave 2 for that specific cluster.\n"
         "   - Record the failed cluster and node state for the final post-mortem report.\n"
         "4. STEP 4 - WAVE 2 EXECUTION (SECONDARY NODES):\n"
-        "   - Execute the rolling update (Standby -> Patch -> Reboot -> Verify -> Unstandby) for Wave 2 nodes (`clusterX_node2`) ONLY on clusters where Wave 1 completed successfully and is quorate.\n"
+        "   - Execute the rolling update (Standby -> Patch -> Reboot -> Verify -> Unstandby) for Wave 2 nodes (`ha_clusterX_node2`) ONLY on clusters where Wave 1 completed successfully and is quorate.\n"
         "5. STEP 5 - POST-CHECK & FINAL SRE REPORT:\n"
         "   - Perform final cluster verification via `ansible_pcs_status`.\n"
         "   - Generate a detailed Lifecycle Matrix of all 10 clusters (20 nodes) indicating PASS/FAIL status and any soft-hang/recovery details.\n"
-        "   - Dispatch the maintenance report via `ansible_send_email`."
+        f"   - Dispatch the maintenance report via `ansible_send_email(recipient='{recipient_email}', subject='[SRE Report] HA Cluster Rolling Update Completed', body=...)`."
     )
 
-def load_fleet_patcher_prompt() -> str:
+def load_fleet_patcher_prompt(recipient_email: str = "fayez.soufyani@gmail.com") -> str:
     return (
         "You are the Enterprise Fleet Patching Subagent.\n\n"
         "MANDATORY PROCEDURAL DIRECTIVES:\n"
-        "1. STEP 1 - LIVE PLANNING: Initialize the checklist using `write_todos` if executing multi-host tasks.\n"
-        "2. STEP 2 - BATCH EXECUTION: Batch DNF Package Updates (`ansible_patch_fleet`) -> Batch Reboots (`ansible_reboot_fleet`) -> Verify Status (`ansible_get_server_info`).\n"
-        "3. STEP 3 - REPORT DISPATCH: Send final summary report via `ansible_send_email`."
+        "1. STEP 1 - DYNAMIC DISCOVERY: Discover and inspect target hosts via `ansible_get_server_info`.\n"
+        "2. STEP 2 - BATCH PACKAGE UPDATES: Call `ansible_patch_fleet` with comma-separated hostlist.\n"
+        "3. STEP 3 - MANAGED FLEET REBOOT: Call `ansible_reboot_fleet` on successfully patched hosts requiring reboot.\n"
+        "4. STEP 4 - UPTIME & STATUS VERIFICATION: Call `ansible_get_server_info` / `ansible_reboot_host` verification.\n"
+        "5. STEP 5 - POST-MORTEM REPORT DISPATCH: Generate the complete host execution table and dispatch via "
+        f"`ansible_send_email(recipient='{recipient_email}', subject='[SRE Report] Fleet Patching Completed', body=...)`."
     )
 
 def load_diagnostics_prompt() -> str:

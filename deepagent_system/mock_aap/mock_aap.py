@@ -180,15 +180,14 @@ def get_job_stdout(job_id):
         lines.append("TASK [Inspect Pacemaker Quorum, STONITH & Resource Groups] ********************")
         for c in cluster_names:
             c_clean = c.replace("-", "_").lower()
-            if not c_clean.startswith("cluster"):
-                c_clean = f"cluster_{c_clean}"
             c_num = "".join(filter(str.isdigit, c_clean)) or "1"
-            n1 = f"cluster{c_num}_node1"
-            n2 = f"cluster{c_num}_node2"
-            rg = f"rg_cluster{c_num}"
+            n1 = f"ha_cluster{c_num}_node1"
+            n2 = f"ha_cluster{c_num}_node2"
+            c_label = f"ha_cluster{c_num}"
+            rg = f"rg_ha_cluster{c_num}"
             
-            lines.append(f"ok: [{c}] => {{")
-            lines.append(f"    \"cluster\": \"{c}\",")
+            lines.append(f"ok: [{c_label}] => {{")
+            lines.append(f"    \"cluster\": \"{c_label}\",")
             lines.append(f"    \"quorum\": \"QUORATE (Active members: {n1}, {n2})\",")
             lines.append(f"    \"active_nodes\": [\"{n1}\", \"{n2}\"],")
             lines.append(f"    \"wave_1_primary\": \"{n1}\",")

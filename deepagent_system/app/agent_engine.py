@@ -61,7 +61,11 @@ async def init_deep_agent():
     diag_tools = [t for t in tools if t.name.startswith("ansible_pcs") or t.name in ("ansible_get_server_info", "hitl_request_approval")]
     single_tools = [t for t in tools if t.name in ("ansible_install_package", "ansible_expand_fs", "ansible_reboot_host", "ansible_get_server_info", "hitl_request_approval")]
 
-    logger.info("Building Deep Agent harness with native create_deep_agent, declarative skills, and subagents...")
+    # Dynamically fetch configured recipient email from DB
+    from app.infrastructure.db.hitl_repository import HitlRepository
+    notification_email = HitlRepository.get_setting("notification_email", "fayez.soufyani@gmail.com")
+
+    logger.info(f"Building Deep Agent harness with native create_deep_agent, declarative skills, and subagents (Recipient: {notification_email})...")
     agent = create_deep_agent(
         model=llm,
         tools=root_tools,
@@ -71,14 +75,14 @@ async def init_deep_agent():
             {
                 "name": "ha_cluster_patcher",
                 "description": "Specialized subagent for Red Hat HA Pacemaker/Corosync cluster rolling updates per SOP 2059253.",
-                "system_prompt": load_ha_patcher_prompt(),
+                "system_prompt": load_ha_patcher_prompt(recipient_email=notification_email),
                 "tools": ha_tools,
                 "skills": ["/app/skills/"]
             },
             {
                 "name": "fleet_patcher",
                 "description": "Specialized subagent for enterprise fleet package updates, reboots, and IPMI console recoveries.",
-                "system_prompt": load_fleet_patcher_prompt(),
+                "system_prompt": load_fleet_patcher_prompt(recipient_email=notification_email),
                 "tools": fleet_tools,
                 "skills": ["/app/skills/"]
             },
