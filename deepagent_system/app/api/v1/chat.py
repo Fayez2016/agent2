@@ -172,7 +172,6 @@ async def chat_completions(request: ChatCompletionRequest, authorization: Option
                                     step = enrich_step_with_hitl(step)
                                     intermediate_steps.append(step)
                                     yield f"data: {json.dumps({'event': 'step', 'step': step, 'step_id': step['step_id']})}\n\n"
-                                    await asyncio.sleep(0.5)  # Responsive pacing for visual observation
 
                                 if loop_broken:
                                     break
@@ -265,12 +264,11 @@ async def chat_completions(request: ChatCompletionRequest, authorization: Option
                     else:
                         response_text = "The requested infrastructure operation was executed successfully via Deep Agent tools."
 
-                # Stream response tokens
+                # Stream response tokens directly
                 words = response_text.split(" ")
                 for i, word in enumerate(words):
                     chunk = word + (" " if i < len(words) - 1 else "")
                     yield f"data: {json.dumps({'event': 'token', 'token': chunk, 'chunk': chunk})}\n\n"
-                    await asyncio.sleep(0.015)
 
                 if thread_id:
                     try:

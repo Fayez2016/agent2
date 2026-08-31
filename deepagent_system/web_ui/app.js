@@ -257,6 +257,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     appendUserMessage(promptText);
     userInput.value = "";
+    isCurrentlyStreaming = true;
     setLoadingState(true);
 
     // Ensure active session thread exists before first submission
@@ -405,6 +406,7 @@ document.addEventListener("DOMContentLoaded", () => {
       cursorEl.style.display = "none";
       streamTextEl.innerHTML = `<span style="color: #ef4444;">⚠️ Error communicating with Deep Agent API: ${escapeHtml(err.message)}</span>`;
     } finally {
+      isCurrentlyStreaming = false;
       setLoadingState(false);
     }
   });
@@ -587,9 +589,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- In-Pane Inline HITL Approval Polling & Resolution ---
+  let isCurrentlyStreaming = false;
+
   function startPendingHitlPolling() {
     setInterval(async () => {
-      if (currentMode !== "enforced") return;
+      // Pause polling during active execution to prevent worker thread congestion
+      if (currentMode !== "enforced" || isCurrentlyStreaming) return;
       try {
         const resp = await fetch(`${BASE_URL}/v1/hitl/pending`);
         const data = await resp.json();
@@ -603,7 +608,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (e) {
         // quiet poll
       }
-    }, 2000);
+    }, 4000); // 4s interval is optimal and avoids thread starvation
   }
 
   function renderPendingInlineHitlCard(req) {
