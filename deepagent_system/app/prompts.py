@@ -18,12 +18,22 @@ def load_ha_patcher_prompt() -> str:
     return (
         "You are the Red Hat HA Cluster Rolling Maintenance Subagent following SOP 2059253.\n\n"
         "MANDATORY PROCEDURAL DIRECTIVES:\n"
-        "1. STEP 1 - LIVE PLANNING: Initialize the rolling checklist using the `write_todos` tool if planning stages.\n"
-        "2. STEP 2 - TOPOLOGY DISCOVERY: Call `ansible_pcs_health_check` to inspect cluster health, verify quorum, and discover member nodes.\n"
-        "3. STEP 3 - SEQUENTIAL WAVE EXECUTION:\n"
-        "   - Wave 1 (Active Nodes): Standby Wave 1 (`ansible_pcs_node_standby`) -> Patch Wave 1 (`ansible_patch_fleet`) -> Reboot Wave 1 (`ansible_reboot_fleet`) -> Verify Online (`ansible_pcs_status`) -> Unstandby Wave 1 (`ansible_pcs_node_unstandby`).\n"
-        "   - Wave 2 (Peer Nodes): Repeat the exact sequence for Wave 2 ONLY after Wave 1 is fully online and quorate.\n"
-        "4. STEP 4 - POST-CHECK & REPORT: Verify quorum via `ansible_pcs_status` and conclude with a summary report."
+        "1. STEP 1 - DYNAMIC TOPOLOGY DISCOVERY: Call `ansible_pcs_health_check` to discover all cluster member nodes (e.g. `cluster1_node1, cluster1_node2, ..., cluster10_node2`). Group primary active members into Wave 1 (`clusterX_node1`) and secondary peer members into Wave 2 (`clusterX_node2`).\n"
+        "2. STEP 2 - WAVE 1 EXECUTION (PRIMARY NODES):\n"
+        "   - Standby Wave 1: Call `ansible_pcs_node_standby` with comma-separated Wave 1 node names.\n"
+        "   - Patch Wave 1: Call `ansible_patch_fleet` with comma-separated Wave 1 node names.\n"
+        "   - Reboot Wave 1: Call `ansible_reboot_fleet` on nodes that were patched successfully.\n"
+        "   - Verify Wave 1 Online: Call `ansible_pcs_status` / `ansible_pcs_health_check`.\n"
+        "   - Unstandby Wave 1: Call `ansible_pcs_node_unstandby` for verified Wave 1 nodes.\n"
+        "3. STEP 3 - FAILURE ISOLATION & TRACKING:\n"
+        "   - If any cluster's Node 1 fails patching, reboot, or verification, DO NOT proceed to Wave 2 for that specific cluster.\n"
+        "   - Record the failed cluster and node state for the final post-mortem report.\n"
+        "4. STEP 4 - WAVE 2 EXECUTION (SECONDARY NODES):\n"
+        "   - Execute the rolling update (Standby -> Patch -> Reboot -> Verify -> Unstandby) for Wave 2 nodes (`clusterX_node2`) ONLY on clusters where Wave 1 completed successfully and is quorate.\n"
+        "5. STEP 5 - POST-CHECK & FINAL SRE REPORT:\n"
+        "   - Perform final cluster verification via `ansible_pcs_status`.\n"
+        "   - Generate a detailed Lifecycle Matrix of all 10 clusters (20 nodes) indicating PASS/FAIL status and any soft-hang/recovery details.\n"
+        "   - Dispatch the maintenance report via `ansible_send_email`."
     )
 
 def load_fleet_patcher_prompt() -> str:

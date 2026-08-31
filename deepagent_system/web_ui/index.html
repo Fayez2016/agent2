@@ -34,7 +34,7 @@
           <div class="sidebar-section">
             <h3>Quick Operations</h3>
             <div class="quick-actions-list">
-              <button class="chip-btn" data-prompt="Using ha-cluster-patcher subagent, execute the Red Hat HA Rolling Update (SOP 2059253) across 10 HA clusters (ha-cluster-01 to ha-cluster-10). Combine pre-check and standby, apply patches, reboot with console recovery if needed, unstandby, and email the final report to admin@enterprise.local.">
+              <button class="chip-btn" data-prompt="Using ha_cluster_patcher subagent, execute the Red Hat HA Rolling Update (SOP 2059253) across 10 HA clusters (cluster1 to cluster10). Dynamically discover the member nodes (cluster1_node1 to cluster10_node2), execute Wave 1 for Node 1 across all clusters, isolate any failed cluster, execute Wave 2 for Node 2 on healthy clusters, and email the final SRE report.">
                 <span>🔄</span> HA Rolling Update (10 Clusters)
               </button>
               <button class="chip-btn" data-prompt="Using fleet-patcher subagent, execute fleet patching on hosts rhel-prod-01 to rhel-prod-10: patch, reboot, verify online with console recovery if needed, and email report.">

@@ -170,33 +170,35 @@ def get_job_stdout(job_id):
 
     # 1. PCS Cluster Health Check
     if template_id == 120:
-        lines = [f"PLAY [PCS Cluster Health Check - Dynamic Inspection ({len(targets)} Targets)] *********"]
+        # Expand 10 clusters if generic or range specified
+        if any("10" in t or "all" in t.lower() or t == "srv-generic-01" or "cluster1" in t.lower() for t in targets):
+            cluster_names = [f"cluster{i}" for i in range(1, 11)]
+        else:
+            cluster_names = targets
+
+        lines = [f"PLAY [PCS Cluster Health Check - Dynamic Inspection ({len(cluster_names)} Clusters)] *********"]
         lines.append("TASK [Inspect Pacemaker Quorum, STONITH & Resource Groups] ********************")
-        for t in targets:
-            c_name = t if "cluster" in t else f"cluster-{t}"
-            n1 = f"{t}-node1" if not ("node1" in t or "node2" in t) else t
-            n2 = f"{t}-node2" if not ("node1" in t or "node2" in t) else f"{t}-peer"
-            rg = f"rg_{t}"
+        for c in cluster_names:
+            c_clean = c.replace("-", "_").lower()
+            if not c_clean.startswith("cluster"):
+                c_clean = f"cluster_{c_clean}"
+            c_num = "".join(filter(str.isdigit, c_clean)) or "1"
+            n1 = f"cluster{c_num}_node1"
+            n2 = f"cluster{c_num}_node2"
+            rg = f"rg_cluster{c_num}"
             
-            # Simulate degraded / warning resource state if explicitly specified
-            if "fail" in t.lower() or "alert" in t.lower():
-                lines.append(f"ok: [{t}] => {{")
-                lines.append(f"    \"cluster\": \"{c_name}\",")
-                lines.append(f"    \"quorum\": \"QUORATE (2/2 nodes active)\",")
-                lines.append(f"    \"stonith\": \"ENABLED\",")
-                lines.append(f"    \"resource_groups\": [\"{rg} -> Degraded (Failcount: 1 on {n1})\"] ,")
-                lines.append(f"    \"health_status\": \"WARNING - Failcount detected\"")
-                lines.append("}")
-            else:
-                lines.append(f"ok: [{t}] => {{")
-                lines.append(f"    \"cluster\": \"{c_name}\",")
-                lines.append(f"    \"quorum\": \"QUORATE (Active members: {n1}, {n2})\",")
-                lines.append(f"    \"stonith\": \"ENABLED (fence_ipmilan active)\",")
-                lines.append(f"    \"resource_groups\": [\"{rg} (vip_{t}, fs_{t}, app_{t}) -> active on {n1}\"],")
-                lines.append(f"    \"health_status\": \"PASS\"")
-                lines.append("}")
+            lines.append(f"ok: [{c}] => {{")
+            lines.append(f"    \"cluster\": \"{c}\",")
+            lines.append(f"    \"quorum\": \"QUORATE (Active members: {n1}, {n2})\",")
+            lines.append(f"    \"active_nodes\": [\"{n1}\", \"{n2}\"],")
+            lines.append(f"    \"wave_1_primary\": \"{n1}\",")
+            lines.append(f"    \"wave_2_secondary\": \"{n2}\",")
+            lines.append(f"    \"stonith\": \"ENABLED (fence_ipmilan active)\",")
+            lines.append(f"    \"resource_groups\": [\"{rg} (vip_{c_num}, fs_{c_num}, app_{c_num}) -> active on {n1}\"],")
+            lines.append(f"    \"health_status\": \"PASS\"")
+            lines.append("}")
         lines.append("\nPLAY RECAP *********************************************************************")
-        lines.append(f"localhost                      : ok={len(targets)}   changed=0    unreachable=0    failed=0")
+        lines.append(f"localhost                      : ok={len(cluster_names)}   changed=0    unreachable=0    failed=0")
         return "\n".join(lines)
 
     # 2. PCS Node Standby
@@ -215,14 +217,18 @@ def get_job_stdout(job_id):
         lines = [f"PLAY [Patch Fleet - DNF Package Updates ({len(targets)} Servers)] ****************"]
         lines.append("TASK [Apply Security & Enhancement Packages via DNF] ***************************")
         for t in targets:
-            if "dnf-err" in t.lower() or "pkg-fail" in t.lower():
-                lines.append(f"failed: [{t}] => {{ \"stage\": \"Patching\", \"error\": \"DNF Transaction Error: GPG key verification failed or package dependency conflict.\", \"reboot_required\": false }}")
+            # Simulate failure if target has 'err', 'fail', 'dnf-err', or specifically simulated node 'cluster3_node1'
+            if any(k in t.lower() for k in ["err", "fail", "dnf", "pkg_fail", "cluster3_node1"]):
+                lines.append(f"failed: [{t}] => {{ \"stage\": \"Patching\", \"error\": \"DNF Transaction Error: GPG key verification failed or package dependency conflict on {t}.\", \"reboot_required\": false }}")
             else:
                 pkgs = random.randint(12, 28)
                 lines.append(f"changed: [{t}] => {{ \"packages_updated\": {pkgs}, \"reboot_required\": true, \"status\": \"applied\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
-            lines.append(f"{t:30} : ok=3    changed=1    unreachable=0    failed=0")
+            if any(k in t.lower() for k in ["err", "fail", "dnf", "pkg_fail", "cluster3_node1"]):
+                lines.append(f"{t:30} : ok=1    changed=0    unreachable=0    failed=1")
+            else:
+                lines.append(f"{t:30} : ok=3    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
     # 4. Managed Reboot
@@ -238,22 +244,25 @@ def get_job_stdout(job_id):
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 5. Check Host Online (Simulates Clean Online vs Soft-Hang ONLY when explicitly requested via 'hang')
+    # 5. Check Host Online (Simulates Clean Online vs Soft-Hang)
     if template_id == 127:
         lines = [f"PLAY [Check Host Online - TCP Port 22 Verification ({len(targets)} Targets)] ****"]
         lines.append("TASK [Probe SSH Port 22 & Validate OS Uptime] **********************************")
         for t in targets:
-            # ONLY simulate a soft-hang if the host explicitly has 'hang' in its name AND is not yet console recovered
-            is_explicit_hang = ("hang" in t.lower()) and (t not in CONSOLE_RECOVERED_HOSTS)
+            # Simulate a soft-hang on hosts with 'hang' or simulated node 'cluster7_node1' before console recovery
+            is_explicit_hang = ("hang" in t.lower() or "cluster7_node1" in t.lower()) and (t not in CONSOLE_RECOVERED_HOSTS)
             if is_explicit_hang:
-                lines.append(f"failed: [{t}] => {{ \"online\": false, \"stage\": \"Reboot Verification\", \"error\": \"SSH Port 22 connection timed out (Kernel soft hang detected).\" }}")
+                lines.append(f"failed: [{t}] => {{ \"online\": false, \"stage\": \"Reboot Verification\", \"error\": \"SSH Port 22 connection timed out (Kernel soft hang detected on {t}).\" }}")
             else:
                 method = "Console Recovered (IPMI)" if t in CONSOLE_RECOVERED_HOSTS else "Standard SSH"
                 uptime = f"{random.randint(40, 90)}s"
                 lines.append(f"ok: [{t}] => {{ \"online\": true, \"uptime\": \"{uptime}\", \"boot_method\": \"{method}\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
-            lines.append(f"{t:30} : ok=2    changed=0    unreachable=0    failed=0")
+            if ("hang" in t.lower() or "cluster7_node1" in t.lower()) and (t not in CONSOLE_RECOVERED_HOSTS):
+                lines.append(f"{t:30} : ok=1    changed=0    unreachable=1    failed=1")
+            else:
+                lines.append(f"{t:30} : ok=2    changed=0    unreachable=0    failed=0")
         return "\n".join(lines)
 
     # 6. Out-of-Band Console Power On / VMware Reset
