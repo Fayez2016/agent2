@@ -120,6 +120,41 @@ def test_regular_fleet_patching():
     assert has_table, "Failed: Host execution table not found."
     print("\n [PASS] Enterprise Fleet Patching verified successfully.")
 
+def test_studio_crud_and_mcp_ping():
+    log_header("TEST 4: Dynamic Agent & MCP Studio Endpoints & Live Tool Ping")
+    
+    # 1. Query registered MCP servers
+    res = requests.get(f"{API_HOST}/v1/studio/mcp_servers")
+    assert res.status_code == 200, f"Failed to list MCP servers: {res.text}"
+    servers = res.json().get("servers", [])
+    assert len(servers) >= 2, f"Expected at least 2 MCP servers, found {len(servers)}"
+    print(f" [PASS] Listed {len(servers)} MCP servers from PostgreSQL: {[s['name'] for s in servers]}")
+
+    # 2. Live Ping Ansible MCP Server
+    res = requests.post(f"{API_HOST}/v1/studio/mcp_servers/ansible/ping")
+    assert res.status_code == 200, f"Ping request failed: {res.text}"
+    ping_data = res.json()
+    assert ping_data["status"] == "connected", f"Ansible MCP not connected: {ping_data}"
+    assert ping_data["live_tools_count"] > 10, f"Insufficient tools reported: {ping_data}"
+    print(f" [PASS] Live ping successful on 'ansible' MCP server: {ping_data['live_tools_count']} live tools reported.")
+
+    # 3. Query Domain Agents & Subagents
+    res = requests.get(f"{API_HOST}/v1/studio/agents")
+    assert res.status_code == 200, f"Failed to list agents: {res.text}"
+    agents = res.json().get("agents", [])
+    assert len(agents) >= 1, "No domain agents returned"
+    linux_ag = next((a for a in agents if a["key_name"] == "linux_sre"), None)
+    assert linux_ag is not None, "linux_sre agent not found"
+    assert len(linux_ag.get("subagents", [])) >= 4, "Subagents not populated for linux_sre"
+    print(f" [PASS] Dynamic Domain Agent '{linux_ag['key_name']}' loaded with {len(linux_ag['subagents'])} subagents.")
+
+    # 4. Query Skills / SOPs
+    res = requests.get(f"{API_HOST}/v1/studio/skills")
+    assert res.status_code == 200, f"Failed to list skills: {res.text}"
+    skills = res.json().get("skills", [])
+    assert len(skills) >= 2, "Skills not populated"
+    print(f" [PASS] Listed {len(skills)} declarative skills from PostgreSQL: {[s['name'] for s in skills]}")
+
 def main():
     print("==============================================================================")
     print(" 🚀 DEEP AGENT CONSOLIDATED TEST SUITE")
@@ -128,6 +163,7 @@ def main():
     suite_start = time.time()
     try:
         test_system_settings()
+        test_studio_crud_and_mcp_ping()
         test_ha_10_clusters_rolling_update()
         test_regular_fleet_patching()
         

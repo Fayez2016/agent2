@@ -85,6 +85,7 @@
           <div class="view-tabs">
             <button class="tab-btn active" id="tab-chat">💬 Chat & Orchestration</button>
             <button class="tab-btn" id="tab-audit">📜 Action Audit Trail</button>
+            <button class="tab-btn" id="tab-studio">⚙️ Agent & MCP Studio</button>
           </div>
 
           <!-- Mode Controls, Export & Hardware Badges -->
@@ -149,7 +150,7 @@
         </div>
 
         <!-- View 2: Action Audit Trail View -->
-        <div id="audit-view" class="audit-view-container">
+        <div id="audit-view" class="audit-view-container" style="display: none;">
           <div class="audit-header">
             <div>
               <h2 style="font-size: 18px; color: #f8fafc;">PostgreSQL Action Audit Trail</h2>
@@ -173,6 +174,55 @@
               <!-- Dynamically populated from PostgreSQL -->
             </tbody>
           </table>
+        </div>
+
+        <!-- View 3: Agent & MCP Studio View -->
+        <div id="studio-view" class="audit-view-container" style="display: none; padding: 24px; overflow-y: auto;">
+          <div class="audit-header" style="margin-bottom: 20px;">
+            <div>
+              <h2 style="font-size: 20px; color: #f8fafc;">⚙️ Dynamic Agent & MCP Studio</h2>
+              <p style="font-size: 13px; color: #94a3b8; margin-top: 4px;">Configure Main Domain Agents, Subagents, Declarative Skills, and FastMCP Server Bridges in PostgreSQL.</p>
+            </div>
+            <button class="refresh-btn" id="refresh-studio-btn">🔄 Refresh Studio Data</button>
+          </div>
+
+          <!-- Studio Grid: 3 Columns (MCP Servers, Domain Agents, Skills) -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px;">
+            
+            <!-- Panel 1: FastMCP Servers Registry -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🔌</span> Registered MCP Servers</h3>
+                <button id="add-mcp-btn" class="export-btn" style="padding: 4px 8px; font-size: 11px;">+ Add Server</button>
+              </div>
+              <div id="mcp-servers-list" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Panel 2: Domain Agents & Subagents -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🤖</span> Domain Main Agents</h3>
+                <button id="add-agent-btn" class="export-btn" style="padding: 4px 8px; font-size: 11px;">+ New Agent</button>
+              </div>
+              <div id="domain-agents-list" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Panel 3: Domain Skills & SOPs -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>📚</span> Declarative Skills / SOPs</h3>
+                <button id="add-skill-btn" class="export-btn" style="padding: 4px 8px; font-size: 11px;">+ New Skill</button>
+              </div>
+              <div id="domain-skills-list" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+          </div>
         </div>
       </main>
     </div>

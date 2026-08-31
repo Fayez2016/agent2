@@ -25,10 +25,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Views
   const chatView = document.getElementById("chat-view");
   const auditView = document.getElementById("audit-view");
+  const studioView = document.getElementById("studio-view");
   const tabChat = document.getElementById("tab-chat");
   const tabAudit = document.getElementById("tab-audit");
+  const tabStudio = document.getElementById("tab-studio");
   const auditTableBody = document.getElementById("audit-table-body");
   const refreshAuditBtn = document.getElementById("refresh-audit-btn");
+  const refreshStudioBtn = document.getElementById("refresh-studio-btn");
 
   // Export Modal
   const exportModal = document.getElementById("export-modal");
@@ -98,17 +101,132 @@ document.addEventListener("DOMContentLoaded", () => {
   tabChat.addEventListener("click", () => {
     tabChat.classList.add("active");
     tabAudit.classList.remove("active");
+    if (tabStudio) tabStudio.classList.remove("active");
     chatView.style.display = "flex";
     auditView.style.display = "none";
+    if (studioView) studioView.style.display = "none";
   });
 
   tabAudit.addEventListener("click", async () => {
     tabAudit.classList.add("active");
     tabChat.classList.remove("active");
+    if (tabStudio) tabStudio.classList.remove("active");
     chatView.style.display = "none";
     auditView.style.display = "block";
+    if (studioView) studioView.style.display = "none";
     await loadAuditHistory();
   });
+
+  if (tabStudio) {
+    tabStudio.addEventListener("click", async () => {
+      tabStudio.classList.add("active");
+      tabChat.classList.remove("active");
+      tabAudit.classList.remove("active");
+      chatView.style.display = "none";
+      auditView.style.display = "none";
+      studioView.style.display = "block";
+      await loadStudioData();
+    });
+  }
+
+  if (refreshStudioBtn) {
+    refreshStudioBtn.addEventListener("click", loadStudioData);
+  }
+
+  // --- Studio Data Loaders & Renderers ---
+  async function loadStudioData() {
+    await Promise.all([loadStudioMCPServers(), loadStudioAgents(), loadStudioSkills()]);
+  }
+
+  async function loadStudioMCPServers() {
+    const listEl = document.getElementById("mcp-servers-list");
+    if (!listEl) return;
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/studio/mcp_servers`);
+      const data = await resp.json();
+      const servers = data.servers || [];
+
+      listEl.innerHTML = servers.map(s => `
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 13px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #60a5fa;">${escapeHtml(s.display_name || s.name)}</strong>
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 10px; padding: 2px 6px;">${escapeHtml(s.domain_scope || 'linux')}</span>
+          </div>
+          <div style="color: #94a3b8; font-size: 11px; margin-top: 4px; word-break: break-all;"><code>${escapeHtml(s.url)}</code></div>
+          <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 11px; color: #64748b;">Transport: ${escapeHtml(s.transport)}</span>
+            <button onclick="pingMCPServer('${s.name}')" style="background: #334155; border: 1px solid #475569; color: #f8fafc; font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer;">⚡ Ping / Tools</button>
+          </div>
+          <div id="mcp-ping-${s.name}" style="margin-top: 6px; font-size: 11px; display: none;"></div>
+        </div>
+      `).join("");
+    } catch (e) {
+      listEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load MCP servers: ${e.message}</div>`;
+    }
+  }
+
+  window.pingMCPServer = async function(serverName) {
+    const target = document.getElementById(`mcp-ping-${serverName}`);
+    if (!target) return;
+    target.style.display = "block";
+    target.innerHTML = `<span style="color: #94a3b8;">Testing connection to ${serverName}...</span>`;
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/studio/mcp_servers/${serverName}/ping`, { method: "POST" });
+      const data = await resp.json();
+      if (data.status === "connected") {
+        target.innerHTML = `<span style="color: #10b981;">✓ Connected (${data.live_tools_count} live tools): ${data.tools.slice(0, 4).join(", ")}...</span>`;
+      } else {
+        target.innerHTML = `<span style="color: #ef4444;">✗ Unreachable: ${data.error || 'Connection timed out'}</span>`;
+      }
+    } catch (e) {
+      target.innerHTML = `<span style="color: #ef4444;">✗ Error: ${e.message}</span>`;
+    }
+  };
+
+  async function loadStudioAgents() {
+    const listEl = document.getElementById("domain-agents-list");
+    if (!listEl) return;
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/studio/agents`);
+      const data = await resp.json();
+      const agents = data.agents || [];
+
+      listEl.innerHTML = agents.map(ag => `
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 13px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #a855f7;">${escapeHtml(ag.display_name)}</strong>
+            <span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; font-size: 10px; padding: 2px 6px;">${escapeHtml(ag.domain_category)}</span>
+          </div>
+          <div style="color: #94a3b8; font-size: 11px; margin-top: 4px;">${escapeHtml(ag.description || '')}</div>
+          <div style="margin-top: 6px; font-size: 11px; color: #64748b;">Subagents (${(ag.subagents || []).length}): ${(ag.subagents || []).map(s => `<code>${escapeHtml(s.name)}</code>`).join(", ")}</div>
+        </div>
+      `).join("");
+    } catch (e) {
+      listEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load agents: ${e.message}</div>`;
+    }
+  }
+
+  async function loadStudioSkills() {
+    const listEl = document.getElementById("domain-skills-list");
+    if (!listEl) return;
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/studio/skills`);
+      const data = await resp.json();
+      const skills = data.skills || [];
+
+      listEl.innerHTML = skills.map(sk => `
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 13px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #38bdf8;">${escapeHtml(sk.display_name || sk.name)}</strong>
+            <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 10px; padding: 2px 6px;">${escapeHtml(sk.domain_category)}</span>
+          </div>
+          <div style="color: #94a3b8; font-size: 11px; margin-top: 4px;">${escapeHtml(sk.description || '')}</div>
+        </div>
+      `).join("");
+    } catch (e) {
+      listEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load skills: ${e.message}</div>`;
+    }
+  }
 
   refreshAuditBtn.addEventListener("click", loadAuditHistory);
 

@@ -7,6 +7,7 @@ from app.api.v1.chat import router as chat_router
 from app.api.v1.hitl import router as hitl_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.threads import router as threads_router
+from app.api.v1.studio import router as studio_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -32,6 +33,7 @@ app.include_router(chat_router)
 app.include_router(hitl_router)
 app.include_router(settings_router)
 app.include_router(threads_router)
+app.include_router(studio_router)
 
 @app.get("/health")
 async def health_check():
