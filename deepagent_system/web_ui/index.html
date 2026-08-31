@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/style.css?v=3.0" />
   </head>
   <body>
     <div class="app-container">
@@ -34,16 +34,16 @@
           <div class="sidebar-section">
             <h3>Quick Operations</h3>
             <div class="quick-actions-list">
-              <button class="chip-btn" data-prompt="Using ha_cluster_patcher subagent, execute the Red Hat HA Rolling Update (SOP 2059253) across 10 HA clusters (ha_cluster1 to ha_cluster10). Dynamically discover member nodes (pattern: ha_cluster1_node1 to ha_cluster10_node2), execute Wave 1 for Node 1 across all clusters, isolate any failed cluster, execute Wave 2 for Node 2 on healthy clusters, and email the final SRE report to the configured recipient.">
+              <button class="chip-btn" data-prompt="Using ha_cluster_patcher subagent, execute the Red Hat HA Rolling Update (SOP 2059253) across 10 HA clusters (ha_cluster1 to ha_cluster10). Discover nodes, apply wave 1 standby, patch, reboot with console recovery if needed, unstandby, isolate failures, and execute wave 2 on healthy clusters.">
                 <span>🔄</span> HA Rolling Update (10 Clusters)
               </button>
-              <button class="chip-btn" data-prompt="Using fleet-patcher subagent, execute fleet patching on hosts rhel-prod-01 to rhel-prod-10: inspect server inventory, apply package updates, execute managed reboots, verify online status with console recovery if needed, and email report to the configured recipient.">
+              <button class="chip-btn" data-prompt="Using fleet_patcher subagent, execute fleet patching on hosts rhel-prod-01 to rhel-prod-10: inspect server inventory, apply package updates, execute managed reboots, verify online status, and email report.">
                 <span>📦</span> Fleet Patching (10 Hosts)
               </button>
-              <button class="chip-btn" data-prompt="Check the Pacemaker cluster health for host rhel-prod-01">
+              <button class="chip-btn" data-prompt="Execute cluster health check on ha_cluster1 and ha_cluster2 and verify quorum, node membership, and fencing configuration.">
                 <span>🔍</span> Check Cluster Health
               </button>
-              <button class="chip-btn" data-prompt="Delegate to the rhel-diagnostics subagent to inspect cluster health on rhel-prod-01">
+              <button class="chip-btn" data-prompt="Delegate to the rhel_diagnostician subagent to inspect cluster health across all clusters.">
                 <span>🤖</span> Run Diagnostics Subagent
               </button>
             </div>
@@ -54,15 +54,15 @@
             <h3>Active Subagents</h3>
             <div class="subagent-badge-list">
               <div class="subagent-item">
-                <div class="subagent-name"><span>🤖</span> ha-cluster-patcher</div>
+                <div class="subagent-name"><span>🤖</span> ha_cluster_patcher</div>
                 <div class="subagent-desc">Zero-downtime Red Hat HA rolling updates per SOP 2059253 with reboot matrix and email reporting.</div>
               </div>
               <div class="subagent-item">
-                <div class="subagent-name"><span>🤖</span> fleet-patcher</div>
+                <div class="subagent-name"><span>🤖</span> fleet_patcher</div>
                 <div class="subagent-desc">Enterprise DNF package updates, managed reboots, uptime verification, and console recovery.</div>
               </div>
               <div class="subagent-item">
-                <div class="subagent-name"><span>🤖</span> rhel-diagnostics</div>
+                <div class="subagent-name"><span>🤖</span> rhel_diagnostician</div>
                 <div class="subagent-desc">Pre-patch node inspection and cluster diagnostic summaries.</div>
               </div>
             </div>
@@ -103,7 +103,7 @@
             <!-- SRE Notification Email Setting Input -->
             <div class="email-setting-container" style="display: flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));">
               <span style="font-size: 13px;">📧</span>
-              <input type="email" id="sre-email-input" value="fayez.soufyani@gmail.com" placeholder="Recipient email..." style="background: transparent; border: none; color: var(--text-color, #fff); font-size: 12px; width: 190px; outline: none;" title="SRE Report Recipient Email" />
+              <input type="email" id="sre-email-input" value="fayez.soufyani@gmail.com" placeholder="Recipient email..." style="background: transparent; border: none; color: var(--text-color, #fff); font-size: 12px; width: 170px; outline: none;" title="SRE Report Recipient Email" />
               <button id="save-email-btn" style="background: var(--accent-color, #3b82f6); border: none; color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 4px; cursor: pointer;">Save</button>
             </div>
 
@@ -187,13 +187,13 @@
           </div>
 
           <!-- Studio Grid: 3 Columns (MCP Servers, Domain Agents, Skills) -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
             
             <!-- Panel 1: FastMCP Servers Registry -->
             <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🔌</span> Registered MCP Servers</h3>
-                <button id="add-mcp-btn" class="export-btn" style="padding: 4px 8px; font-size: 11px;">+ Add Server</button>
+                <span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; font-size: 11px; padding: 2px 6px;">PostgreSQL Registry</span>
               </div>
               <div id="mcp-servers-list" style="display: flex; flex-direction: column; gap: 10px;">
                 <!-- Dynamically populated -->
@@ -204,7 +204,7 @@
             <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🤖</span> Domain Main Agents</h3>
-                <button id="add-agent-btn" class="export-btn" style="padding: 4px 8px; font-size: 11px;">+ New Agent</button>
+                <span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; font-size: 11px; padding: 2px 6px;">Multi-Domain</span>
               </div>
               <div id="domain-agents-list" style="display: flex; flex-direction: column; gap: 10px;">
                 <!-- Dynamically populated -->
@@ -215,7 +215,7 @@
             <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>📚</span> Declarative Skills / SOPs</h3>
-                <button id="add-skill-btn" class="export-btn" style="padding: 4px 8px; font-size: 11px;">+ New Skill</button>
+                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 11px; padding: 2px 6px;">SOP Knowledge</span>
               </div>
               <div id="domain-skills-list" style="display: flex; flex-direction: column; gap: 10px;">
                 <!-- Dynamically populated -->
@@ -244,6 +244,7 @@
       </div>
     </div>
 
-    <script src="/app.js"></script>
+    <!-- Scripts -->
+    <script src="/app.js?v=3.0"></script>
   </body>
 </html>
