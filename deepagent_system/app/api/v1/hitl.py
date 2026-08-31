@@ -42,3 +42,12 @@ async def get_hitl_request(request_id: int):
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
     return req
+
+@router.get("/history")
+async def get_hitl_history():
+    """Fetches full compliance audit history from PostgreSQL."""
+    try:
+        history = HitlRepository.get_audit_history(limit=150)
+        return {"history": history, "count": len(history)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to query audit history: {e}")

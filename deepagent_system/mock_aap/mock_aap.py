@@ -1,117 +1,114 @@
-from flask import Flask, request, jsonify
+import json
+import logging
 import random
 import time
-import logging
-import sys
-import json
-import re
-from datetime import datetime
+import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timezone
+from flask import Flask, request, jsonify
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('aap_server.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger("AAP-Simulation-Engine")
+# Setup logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("MockAAPServer")
 
 app = Flask(__name__)
 
-# State tracking for dynamic simulation
+# State trackers
+jobs = {}
+job_counter = 1000
 CONSOLE_RECOVERED_HOSTS = set()
 PCS_FIXED_HOSTS = set()
 
-TEMPLATE_MAP = {
-    "Limited Run Any Command": 101,
-    "Reboot Host": 102,
-    "Install Package": 103,
-    "Expand Filesystem": 104,
-    "Fix PCS Cluster": 105,
-    "Patch Fleet": 110,
-    "Reboot Fleet": 111,
-    "PCS Pre-Patch Check": 112,
-    "PCS Post-Patch Check": 113,
-    "VMware VM Reset": 107,
-    "PCS Status": 108,
-    "Send Email Notification": 109,
-    "PCS Node Standby": 114,
-    "PCS Node Unstandby": 115,
-    "PCS Cluster Stop": 116,
-    "PCS Cluster Start": 117,
-    "PCS Cluster Disable": 118,
-    "PCS Cluster Enable": 119,
-    "PCS Health Check": 120,
-    "PCS CIB Upgrade": 121,
-    "PCS Maintenance Mode": 122,
-    "PCS Resource Move": 123,
-    "PCS Resource Clear": 124,
-    "PCS Constraint List": 125,
-    "Get Server Info": 126,
-    "Check Host Online": 127,
-    "Console Power On": 128,
-    "HA Rolling Update": 129
-}
-
-jobs = {}
-
 def get_iso_now():
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat()
 
-def extract_host_tokens(raw_input) -> list:
-    """Universally parses any input format (comma-delimited, space-delimited, list, JSON) into distinct host tokens."""
-    if not raw_input:
-        return ["srv-generic-01"]
-    if isinstance(raw_input, list):
-        return [str(x).strip() for x in raw_input if str(x).strip()]
-    
-    cleaned = str(raw_input).strip()
-    tokens = re.split(r'[,\s]+', cleaned)
-    tokens = [t.strip() for t in tokens if t.strip() and t.lower() not in ["and", "to", "across", "hosts", "clusters", "the"]]
-    return tokens if tokens else ["srv-generic-01"]
+def extract_host_tokens(raw_str):
+    if not raw_str:
+        return []
+    import re
+    return [t.strip() for t in re.split(r'[\s,;|]+', str(raw_str)) if t.strip()]
+
+def try_send_real_smtp_email(recipient: str, subject: str, body: str) -> bool:
+    """Attempts direct SMTP transmission if host network allows port 25/587."""
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = "deepagent-sre@enterprise.local"
+        msg["To"] = recipient
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        smtp_server = os.getenv("SMTP_SERVER", "localhost")
+        smtp_port = int(os.getenv("SMTP_PORT", "25"))
+        
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=2.0) as server:
+            server.send_message(msg)
+            logger.info(f"Real SMTP email dispatched to {recipient} via {smtp_server}:{smtp_port}")
+            return True
+    except Exception as e:
+        logger.info(f"SMTP delivery direct note: {e} (Simulated Mock AAP delivery logged for {recipient})")
+        return False
+
+# 10 Clusters Dynamic Registry
+TOPOLOGY_CLUSTERS = [f"ha_cluster{i}" for i in range(1, 11)]
+
+JOB_TEMPLATES = [
+    {"id": 101, "name": "PCS Node Standby"},
+    {"id": 102, "name": "PCS Node Unstandby"},
+    {"id": 103, "name": "PCS Cluster Stop"},
+    {"id": 104, "name": "PCS Cluster Start"},
+    {"id": 105, "name": "Fix PCS Cluster"},
+    {"id": 106, "name": "Expand Filesystem"},
+    {"id": 107, "name": "Console Power On"},
+    {"id": 108, "name": "PCS Status"},
+    {"id": 109, "name": "Send Email Notification"},
+    {"id": 110, "name": "Patch Fleet"},
+    {"id": 111, "name": "Reboot Fleet"},
+    {"id": 112, "name": "PCS Maintenance Mode"},
+    {"id": 113, "name": "PCS Resource Move"},
+    {"id": 114, "name": "PCS Resource Clear"},
+    {"id": 115, "name": "Install Package"},
+    {"id": 116, "name": "PCS Cluster Disable"},
+    {"id": 117, "name": "PCS Cluster Enable"},
+    {"id": 118, "name": "PCS Health Check"},
+    {"id": 119, "name": "Limited Run Any Command"},
+    {"id": 120, "name": "PCS CIB Upgrade"},
+    {"id": 121, "name": "PCS Constraint List"},
+    {"id": 126, "name": "Get Server Info"},
+    {"id": 127, "name": "Check Host Online"},
+    {"id": 128, "name": "VMware VM Reset"},
+]
 
 @app.route('/api/v2/job_templates', methods=['GET'])
 def get_job_templates():
-    name = request.args.get('name')
-    template_id = TEMPLATE_MAP.get(name, 200)
-    
-    return jsonify({
-        "count": 1,
-        "next": None,
-        "previous": None,
-        "results": [
-            {
-                "id": template_id,
-                "type": "job_template",
-                "url": f"/api/v2/job_templates/{template_id}/",
-                "name": name,
-                "description": f"Dynamic SRE infrastructure simulation for {name}",
-                "job_type": "run",
-                "inventory": 1,
-                "project": 1,
-                "playbook": f"{name.lower().replace(' ', '_')}.yml",
-                "created": "2026-01-01T12:00:00.000000Z",
-                "modified": get_iso_now()
-            }
-        ]
-    })
+    name_filter = request.args.get('name')
+    if name_filter:
+        results = [jt for jt in JOB_TEMPLATES if jt['name'].lower() == name_filter.lower()]
+    else:
+        results = JOB_TEMPLATES
+    return jsonify({"count": len(results), "results": results})
 
 @app.route('/api/v2/job_templates/<int:template_id>/launch/', methods=['POST'])
 def launch_job(template_id):
-    job_id = random.randint(10000, 99999)
-    extra_vars = {}
-    if request.is_json:
-        data = request.get_json(silent=True)
-        if data:
-            extra_vars = data.get('extra_vars', {})
+    global job_counter
+    job_counter += 1
+    job_id = job_counter
     
-    # 1. Record console recovery for target hosts
-    if template_id in [107, 128]: # VMware Reset or Console Power On
-        raw = extra_vars.get('hostlist') or extra_vars.get('hostname') or extra_vars.get('vm_name') or ''
+    data = request.get_json(silent=True) or {}
+    extra_vars = data.get("extra_vars", {})
+    if isinstance(extra_vars, str):
+        try:
+            extra_vars = json.loads(extra_vars)
+        except Exception:
+            extra_vars = {}
+
+    # 1. Reset console recovery if node is rebooted
+    if template_id in [102, 111]: # Managed Reboot
+        raw = extra_vars.get('hostlist') or extra_vars.get('hostname') or ''
         for h in extract_host_tokens(raw):
-            CONSOLE_RECOVERED_HOSTS.add(h)
-            logger.info(f"Console Recovery recorded for host: {h}")
+            CONSOLE_RECOVERED_HOSTS.discard(h)
+            logger.info(f"Reboot executed on {h}. Reset console state.")
 
     # 2. Record PCS cluster fixes
     if template_id == 105: # Fix PCS Cluster
@@ -119,6 +116,13 @@ def launch_job(template_id):
         for h in extract_host_tokens(raw):
             PCS_FIXED_HOSTS.add(h)
             logger.info(f"PCS Cluster Fix recorded for host: {h}")
+
+    # 3. Handle Send Email Notification (Real SMTP Attempt + Audit Log)
+    if template_id == 109:
+        recipient = extra_vars.get('recipient', 'fayez.soufyani@gmail.com')
+        subj = extra_vars.get('subject', '[SRE Report] Deep Agent Execution Summary')
+        body = extra_vars.get('body', 'Deep Agent SRE Maintenance Completed Successfully.')
+        try_send_real_smtp_email(recipient, subj, body)
 
     jobs[job_id] = {
         "id": job_id,
@@ -163,49 +167,42 @@ def get_job_stdout(job_id):
     if not job:
         return "Not found", 404
     
-    template_id = job["template_id"]
-    extra_vars = job["extra_vars"]
-    raw_targets = extra_vars.get('hostlist') or extra_vars.get('hostname') or extra_vars.get('target_hosts') or ''
+    extra_vars = job.get("extra_vars", {})
+    raw_targets = extra_vars.get("hostlist") or extra_vars.get("hostname") or "localhost"
     targets = extract_host_tokens(raw_targets)
+    if not targets:
+        targets = ["localhost"]
 
-    # 1. PCS Cluster Health Check
-    if template_id == 120:
-        # Expand 10 clusters if generic or range specified
-        if any("10" in t or "all" in t.lower() or t == "srv-generic-01" or "cluster1" in t.lower() for t in targets):
-            cluster_names = [f"cluster{i}" for i in range(1, 11)]
-        else:
-            cluster_names = targets
+    template_id = job.get("template_id")
 
-        lines = [f"PLAY [PCS Cluster Health Check - Dynamic Inspection ({len(cluster_names)} Clusters)] *********"]
-        lines.append("TASK [Inspect Pacemaker Quorum, STONITH & Resource Groups] ********************")
-        for c in cluster_names:
-            c_clean = c.replace("-", "_").lower()
-            c_num = "".join(filter(str.isdigit, c_clean)) or "1"
-            n1 = f"ha_cluster{c_num}_node1"
-            n2 = f"ha_cluster{c_num}_node2"
-            c_label = f"ha_cluster{c_num}"
-            rg = f"rg_ha_cluster{c_num}"
+    # 1. Dynamic 10-Cluster Discovery & Health Check
+    if template_id == 118: # PCS Health Check
+        clusters_to_check = targets if any("ha_cluster" in t or "cluster" in t for t in targets) else TOPOLOGY_CLUSTERS
+        lines = [f"PLAY [10-Cluster Dynamic HA Health Check ({len(clusters_to_check)} Clusters)] **********"]
+        lines.append("TASK [Inspect Corosync Membership, Quorum & STONITH Status] ********************")
+        
+        for c in clusters_to_check:
+            c_clean = c.strip()
+            num_match = "".join(filter(str.isdigit, c_clean))
+            num = num_match if num_match else "1"
+            n1 = f"ha_cluster{num}_node1"
+            n2 = f"ha_cluster{num}_node2"
             
-            lines.append(f"ok: [{c_label}] => {{")
-            lines.append(f"    \"cluster\": \"{c_label}\",")
-            lines.append(f"    \"quorum\": \"QUORATE (Active members: {n1}, {n2})\",")
-            lines.append(f"    \"active_nodes\": [\"{n1}\", \"{n2}\"],")
-            lines.append(f"    \"wave_1_primary\": \"{n1}\",")
-            lines.append(f"    \"wave_2_secondary\": \"{n2}\",")
-            lines.append(f"    \"stonith\": \"ENABLED (fence_ipmilan active)\",")
-            lines.append(f"    \"resource_groups\": [\"{rg} (vip_{c_num}, fs_{c_num}, app_{c_num}) -> active on {n1}\"],")
-            lines.append(f"    \"health_status\": \"PASS\"")
-            lines.append("}")
+            lines.append(
+                f"ok: [{c_clean}] => {{ \"cluster\": \"{c_clean}\", \"quorum\": \"QUORATE\", \"stonith\": \"enabled\", "
+                f"\"nodes\": [\"{n1}\", \"{n2}\"], \"active_members\": [\"{n1}\", \"{n2}\"], \"primary_active_node\": \"{n1}\", \"secondary_node\": \"{n2}\" }}"
+            )
         lines.append("\nPLAY RECAP *********************************************************************")
-        lines.append(f"localhost                      : ok={len(cluster_names)}   changed=0    unreachable=0    failed=0")
+        for c in clusters_to_check:
+            lines.append(f"{c:30} : ok=3    changed=0    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 2. PCS Node Standby
-    if template_id == 114:
-        lines = [f"PLAY [PCS Node Standby - Evacuation ({len(targets)} Nodes)] **********************"]
-        lines.append("TASK [Set Standby State & Trigger Resource Failover] ***************************")
+    # 2. Server Inventory Pre-Inspection
+    if template_id == 126:
+        lines = [f"PLAY [Discover Server Inventory ({len(targets)} Servers)] **********************"]
+        lines.append("TASK [Gather Operating System Architecture, Kernel & Hardware Facts] ***********")
         for t in targets:
-            lines.append(f"changed: [{t}] => {{ \"node\": \"{t}\", \"state\": \"STANDBY\", \"msg\": \"Resources migrated to active peer.\" }}")
+            lines.append(f"ok: [{t}] => {{ \"os\": \"Red Hat Enterprise Linux 9.4\", \"kernel\": \"5.14.0-427.el9.x86_64\", \"arch\": \"x86_64\", \"uptime_sec\": 864000, \"status\": \"healthy\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
@@ -216,7 +213,7 @@ def get_job_stdout(job_id):
         lines = [f"PLAY [Patch Fleet - DNF Package Updates ({len(targets)} Servers)] ****************"]
         lines.append("TASK [Apply Security & Enhancement Packages via DNF] ***************************")
         for t in targets:
-            # Simulate failure if target has 'err', 'fail', 'dnf', or specifically simulated test targets 'cluster3_node1', 'ha_cluster3_node1', 'rhel-prod-04'
+            # Simulate failure if target has 'err', 'fail', 'dnf', 'cluster3_node1', 'ha_cluster3_node1', 'rhel-prod-04'
             is_patch_failure = any(k in t.lower() for k in ["err", "fail", "dnf", "pkg_fail", "cluster3_node1", "ha_cluster3_node1", "rhel-prod-04", "prod-04"])
             if is_patch_failure:
                 lines.append(f"failed: [{t}] => {{ \"stage\": \"Patching\", \"error\": \"DNF Transaction Error: GPG key verification failed or package dependency conflict on {t}.\", \"reboot_required\": false }}")
@@ -281,22 +278,22 @@ def get_job_stdout(job_id):
 
     # 7. PCS Cluster Fix / Cleanup
     if template_id == 105:
-        lines = [f"PLAY [Fix PCS Cluster Resources ({len(targets)} Targets)] ************************"]
-        lines.append("TASK [Clear Failcounts & Rebalance Resource Groups] *****************************")
+        lines = [f"PLAY [Fix PCS Cluster ({len(targets)} Nodes)] ************************************"]
+        lines.append("TASK [Clear PCS Resource Failcounts & Re-enable Fencing] ***********************")
         for t in targets:
-            PCS_FIXED_HOSTS.add(t)
-            lines.append(f"changed: [{t}] => {{ \"msg\": \"Resource failcounts cleared and constraints rebalanced.\", \"status\": \"cleaned\" }}")
+            lines.append(f"changed: [{t}] => {{ \"msg\": \"PCS resource failcounts cleared and fencing reintegrated.\", \"status\": \"healthy\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 8. PCS Node Unstandby
-    if template_id == 115:
-        lines = [f"PLAY [PCS Node Unstandby - Reintegration ({len(targets)} Nodes)] *****************"]
-        lines.append("TASK [Clear Standby State & Restore Cluster Quorum] *****************************")
+    # 8. Node Standby / Unstandby
+    if template_id in [101, 102]:
+        action_str = "Standby" if template_id == 101 else "Unstandby"
+        lines = [f"PLAY [PCS Node {action_str} ({len(targets)} Nodes)] ********************************"]
+        lines.append(f"TASK [Place Nodes in {action_str} State] ****************************************")
         for t in targets:
-            lines.append(f"changed: [{t}] => {{ \"node\": \"{t}\", \"state\": \"UNSTANDBY\", \"msg\": \"Node reintegrated into cluster successfully. Quorum balanced.\" }}")
+            lines.append(f"changed: [{t}] => {{ \"node\": \"{t}\", \"state\": \"{action_str.lower()}\", \"resources_migrated\": true }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
@@ -315,7 +312,7 @@ def get_job_stdout(job_id):
 
     # 10. Send Email Notification
     if template_id == 109:
-        recipient = extra_vars.get('recipient', 'admin@enterprise.local')
+        recipient = extra_vars.get('recipient', 'fayez.soufyani@gmail.com')
         subj = extra_vars.get('subject', '[SRE Report] Maintenance Completed')
         return f"""
 PLAY [Send Email Notification] *************************************************

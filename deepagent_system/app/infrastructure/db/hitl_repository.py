@@ -105,6 +105,32 @@ class HitlRepository:
             return None
 
     @staticmethod
+    def get_audit_history(limit: int = 100) -> List[Dict[str, Any]]:
+        with DatabasePool.get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, action_name, action_summary, status, requested_at, resolved_at
+                FROM hitl_requests
+                ORDER BY id DESC
+                LIMIT %s;
+                """,
+                (limit,)
+            )
+            rows = cursor.fetchall()
+            history = []
+            for r in rows:
+                h = {
+                    "id": r["id"],
+                    "action_name": r["action_name"] or "System Operation",
+                    "action_summary": r["action_summary"],
+                    "status": r["status"],
+                    "requested_at": r["requested_at"].isoformat() if isinstance(r.get("requested_at"), datetime) else (str(r.get("requested_at")) if r.get("requested_at") else ""),
+                    "resolved_at": r["resolved_at"].isoformat() if isinstance(r.get("resolved_at"), datetime) else (str(r.get("resolved_at")) if r.get("resolved_at") else "")
+                }
+                history.append(h)
+            return history
+
+    @staticmethod
     def purge_all() -> int:
         with DatabasePool.get_cursor(commit=True) as cursor:
             cursor.execute("DELETE FROM hitl_requests;")
