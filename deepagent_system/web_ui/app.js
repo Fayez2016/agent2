@@ -26,9 +26,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const chatView = document.getElementById("chat-view");
   const auditView = document.getElementById("audit-view");
   const studioView = document.getElementById("studio-view");
+  const settingsView = document.getElementById("settings-view");
   const tabChat = document.getElementById("tab-chat");
   const tabAudit = document.getElementById("tab-audit");
   const tabStudio = document.getElementById("tab-studio");
+  const tabSettings = document.getElementById("tab-settings");
   const auditTableBody = document.getElementById("audit-table-body");
   const refreshAuditBtn = document.getElementById("refresh-audit-btn");
   const refreshStudioBtn = document.getElementById("refresh-studio-btn");
@@ -39,6 +41,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const closeExportModalBtn = document.getElementById("close-export-modal");
   const downloadMdBtn = document.getElementById("download-md-btn");
   const printReportBtn = document.getElementById("print-report-btn");
+
+  // Settings Elements
+  const settingsEmailInput = document.getElementById("settings-email-input");
+  const settingsSaveEmailBtn = document.getElementById("settings-save-email-btn");
+  const settingsPurgeDbBtn = document.getElementById("settings-purge-db-btn");
+  const settingsHitlToggle = document.getElementById("settings-hitl-toggle");
+  const settingsModeLabel = document.getElementById("settings-mode-label");
+  const hitlBadgeIcon = document.getElementById("hitl-badge-icon");
+  const hitlBadgeText = document.getElementById("hitl-badge-text");
 
   let currentExportMarkdown = "";
 
@@ -52,24 +63,21 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- SRE Report Recipient Email Settings ---
-  const sreEmailInput = document.getElementById("sre-email-input");
-  const saveEmailBtn = document.getElementById("save-email-btn");
-
   async function fetchNotificationEmail() {
     try {
       const resp = await fetch(`${BASE_URL}/v1/settings/notification_email`);
       const data = await resp.json();
-      if (data.email && sreEmailInput) {
-        sreEmailInput.value = data.email;
+      if (data.email && settingsEmailInput) {
+        settingsEmailInput.value = data.email;
       }
     } catch (e) {
       console.warn("Failed to fetch notification email", e);
     }
   }
 
-  if (saveEmailBtn) {
-    saveEmailBtn.addEventListener("click", async () => {
-      const email = (sreEmailInput.value || "").trim();
+  if (settingsSaveEmailBtn) {
+    settingsSaveEmailBtn.addEventListener("click", async () => {
+      const email = (settingsEmailInput.value || "").trim();
       if (!email || !email.includes("@")) {
         alert("Please enter a valid email address.");
         return;
@@ -82,11 +90,11 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         const data = await resp.json();
         if (data.status === "success") {
-          saveEmailBtn.textContent = "✓ Saved";
-          saveEmailBtn.style.background = "#10b981";
+          settingsSaveEmailBtn.textContent = "✓ Saved";
+          settingsSaveEmailBtn.style.background = "#10b981";
           setTimeout(() => {
-            saveEmailBtn.textContent = "Save";
-            saveEmailBtn.style.background = "var(--accent-color, #3b82f6)";
+            settingsSaveEmailBtn.textContent = "Save Email";
+            settingsSaveEmailBtn.style.background = "var(--accent-color, #3b82f6)";
           }, 2000);
         } else {
           alert("Failed to save email: " + JSON.stringify(data));
@@ -97,35 +105,63 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  if (settingsPurgeDbBtn) {
+    settingsPurgeDbBtn.addEventListener("click", async () => {
+      if (!confirm("Are you sure you want to purge stale thread histories and historical test HITL records from PostgreSQL?")) {
+        return;
+      }
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/hitl/cleanup`, { method: "POST" });
+        const data = await resp.json();
+        alert(`✓ Cleanup Completed:\n- Purged Threads: ${data.purged_threads || 0}\n- Purged Messages: ${data.purged_messages || 0}\n- Purged HITL Audits: ${data.purged_hitl || 0}`);
+        await loadThreads();
+      } catch (e) {
+        alert("Failed to clean database: " + e.message);
+      }
+    });
+  }
+
   // --- View Switcher ---
-  tabChat.addEventListener("click", () => {
-    tabChat.classList.add("active");
+  function hideAllViews() {
+    tabChat.classList.remove("active");
     tabAudit.classList.remove("active");
     if (tabStudio) tabStudio.classList.remove("active");
-    chatView.style.display = "flex";
+    if (tabSettings) tabSettings.classList.remove("active");
+    chatView.style.display = "none";
     auditView.style.display = "none";
     if (studioView) studioView.style.display = "none";
+    if (settingsView) settingsView.style.display = "none";
+  }
+
+  tabChat.addEventListener("click", () => {
+    hideAllViews();
+    tabChat.classList.add("active");
+    chatView.style.display = "flex";
   });
 
   tabAudit.addEventListener("click", async () => {
+    hideAllViews();
     tabAudit.classList.add("active");
-    tabChat.classList.remove("active");
-    if (tabStudio) tabStudio.classList.remove("active");
-    chatView.style.display = "none";
     auditView.style.display = "block";
-    if (studioView) studioView.style.display = "none";
     await loadAuditHistory();
   });
 
   if (tabStudio) {
     tabStudio.addEventListener("click", async () => {
+      hideAllViews();
       tabStudio.classList.add("active");
-      tabChat.classList.remove("active");
-      tabAudit.classList.remove("active");
-      chatView.style.display = "none";
-      auditView.style.display = "none";
       studioView.style.display = "block";
       await loadStudioData();
+    });
+  }
+
+  if (tabSettings) {
+    tabSettings.addEventListener("click", async () => {
+      hideAllViews();
+      tabSettings.classList.add("active");
+      settingsView.style.display = "block";
+      await fetchNotificationEmail();
+      await fetchHitlMode();
     });
   }
 
@@ -133,7 +169,7 @@ document.addEventListener("DOMContentLoaded", () => {
     refreshStudioBtn.addEventListener("click", loadStudioData);
   }
 
-  // --- Studio Data Loaders & Renderers ---
+  // --- Linux SRE Studio Data Loaders & Renderers ---
   async function loadStudioData() {
     await Promise.all([loadStudioMCPServers(), loadStudioAgents(), loadStudioSkills()]);
   }
@@ -155,7 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div style="color: #94a3b8; font-size: 11px; margin-top: 4px; word-break: break-all;"><code>${escapeHtml(s.url)}</code></div>
           <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 11px; color: #64748b;">Transport: ${escapeHtml(s.transport)}</span>
-            <button onclick="pingMCPServer('${s.name}')" style="background: #334155; border: 1px solid #475569; color: #f8fafc; font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer;">⚡ Ping / Tools</button>
+            <button onclick="pingMCPServer('${s.name}')" style="background: #334155; border: 1px solid #475569; color: #f8fafc; font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer;">⚡ Ping / Live Tools</button>
           </div>
           <div id="mcp-ping-${s.name}" style="margin-top: 6px; font-size: 11px; display: none;"></div>
         </div>
@@ -174,7 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const resp = await fetch(`${BASE_URL}/v1/studio/mcp_servers/${serverName}/ping`, { method: "POST" });
       const data = await resp.json();
       if (data.status === "connected") {
-        target.innerHTML = `<span style="color: #10b981;">✓ Connected (${data.live_tools_count} live tools): ${data.tools.slice(0, 4).join(", ")}...</span>`;
+        target.innerHTML = `<div style="color: #10b981; margin-bottom: 4px;">✓ Connected (${data.live_tools_count} live tools):</div><div style="color: #94a3b8; font-size: 10px; max-height: 80px; overflow-y: auto;">${data.tools.map(t => `<code style="display:inline-block; margin:2px; padding:2px 4px; background:#0f172a; border-radius:3px;">${escapeHtml(t)}</code>`).join(" ")}</div>`;
       } else {
         target.innerHTML = `<span style="color: #ef4444;">✗ Unreachable: ${data.error || 'Connection timed out'}</span>`;
       }
@@ -184,25 +220,57 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   async function loadStudioAgents() {
-    const listEl = document.getElementById("domain-agents-list");
-    if (!listEl) return;
+    const mainCardEl = document.getElementById("linux-main-agent-card");
+    const subListEl = document.getElementById("domain-subagents-list");
     try {
       const resp = await fetch(`${BASE_URL}/v1/studio/agents`);
       const data = await resp.json();
       const agents = data.agents || [];
+      const linuxAgent = agents.find(a => a.key_name === "linux_sre") || agents[0];
 
-      listEl.innerHTML = agents.map(ag => `
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 13px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <strong style="color: #a855f7;">${escapeHtml(ag.display_name)}</strong>
-            <span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; font-size: 10px; padding: 2px 6px;">${escapeHtml(ag.domain_category)}</span>
+      if (linuxAgent && mainCardEl) {
+        mainCardEl.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div>
+              <h3 style="font-size: 16px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🛡️</span> ${escapeHtml(linuxAgent.display_name)}</h3>
+              <div style="font-size: 12px; color: #94a3b8; margin-top: 2px;">Domain Category: <code>${escapeHtml(linuxAgent.domain_category)}</code> | Model: <code>${escapeHtml(linuxAgent.model_name)}</code></div>
+            </div>
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; padding: 3px 8px;">Active Lead SRE</span>
           </div>
-          <div style="color: #94a3b8; font-size: 11px; margin-top: 4px;">${escapeHtml(ag.description || '')}</div>
-          <div style="margin-top: 6px; font-size: 11px; color: #64748b;">Subagents (${(ag.subagents || []).length}): ${(ag.subagents || []).map(s => `<code>${escapeHtml(s.name)}</code>`).join(", ")}</div>
-        </div>
-      `).join("");
+          <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 10px;">${escapeHtml(linuxAgent.description || '')}</div>
+          <details style="background: #0f172a; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px;">
+            <summary style="font-size: 12px; font-weight: 600; color: #60a5fa; cursor: pointer;">🔍 View Lead Orchestrator System Prompt</summary>
+            <pre style="margin-top: 8px; font-size: 11px; color: #94a3b8; white-space: pre-wrap; font-family: var(--font-mono); max-height: 180px; overflow-y: auto;">${escapeHtml(linuxAgent.system_prompt)}</pre>
+          </details>
+        `;
+
+        if (subListEl) {
+          const subagents = linuxAgent.subagents || [];
+          subListEl.innerHTML = subagents.map(sub => `
+            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; font-size: 13px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong style="color: #c084fc; font-family: var(--font-mono); font-size: 12px;">🤖 ${escapeHtml(sub.name)}</strong>
+                <span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; font-size: 10px; padding: 2px 6px;">${(sub.tool_bindings || []).length} Tools</span>
+              </div>
+              <div style="color: #94a3b8; font-size: 11px; margin-top: 4px;">${escapeHtml(sub.description || '')}</div>
+              
+              <div style="margin-top: 8px; font-size: 11px;">
+                <span style="color: #64748b;">Bound FastMCP Tools:</span>
+                <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
+                  ${(sub.tool_bindings || []).map(tb => `<code style="font-size: 10px; background: #0f172a; padding: 2px 5px; border-radius: 3px; color: #38bdf8;">${escapeHtml(tb)}</code>`).join("")}
+                </div>
+              </div>
+
+              <details style="margin-top: 8px; background: #0f172a; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 4px; padding: 6px 10px;">
+                <summary style="font-size: 11px; font-weight: 600; color: #a855f7; cursor: pointer;">📜 Subagent System Prompt</summary>
+                <pre style="margin-top: 6px; font-size: 10px; color: #94a3b8; white-space: pre-wrap; font-family: var(--font-mono); max-height: 140px; overflow-y: auto;">${escapeHtml(sub.system_prompt)}</pre>
+              </details>
+            </div>
+          `).join("");
+        }
+      }
     } catch (e) {
-      listEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load agents: ${e.message}</div>`;
+      if (mainCardEl) mainCardEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load Linux SRE agent: ${e.message}</div>`;
     }
   }
 
@@ -221,6 +289,10 @@ document.addEventListener("DOMContentLoaded", () => {
             <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 10px; padding: 2px 6px;">${escapeHtml(sk.domain_category)}</span>
           </div>
           <div style="color: #94a3b8; font-size: 11px; margin-top: 4px;">${escapeHtml(sk.description || '')}</div>
+          <details style="margin-top: 6px; background: #0f172a; border-radius: 4px; padding: 4px 8px;">
+            <summary style="font-size: 11px; color: #64748b; cursor: pointer;">View Markdown SOP</summary>
+            <pre style="margin-top: 6px; font-size: 10px; color: #94a3b8; white-space: pre-wrap;">${escapeHtml(sk.content_markdown)}</pre>
+          </details>
         </div>
       `).join("");
     } catch (e) {
@@ -230,7 +302,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   refreshAuditBtn.addEventListener("click", loadAuditHistory);
 
-  // --- HITL Mode Toggle ---
+  // --- HITL Mode Management & Top Header Sync ---
+  function updateModeUI() {
+    const isEnforced = currentMode === "enforced";
+    if (settingsHitlToggle) settingsHitlToggle.checked = isEnforced;
+    if (settingsModeLabel) {
+      settingsModeLabel.textContent = isEnforced ? "🛡️ Guardrail Mode (HITL Enforced)" : "⚡ 24/7 Autonomous Mode (HITL OFF)";
+      settingsModeLabel.style.color = isEnforced ? "#60a5fa" : "#10b981";
+    }
+    if (hitlBadgeIcon) hitlBadgeIcon.textContent = isEnforced ? "🛡️" : "⚡";
+    if (hitlBadgeText) hitlBadgeText.textContent = isEnforced ? "HITL Enforced" : "Autonomous";
+  }
+
   async function fetchHitlMode() {
     try {
       const resp = await fetch(`${BASE_URL}/v1/settings/hitl_mode`);
@@ -242,32 +325,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  hitlModeToggle.addEventListener("change", async () => {
-    const newMode = hitlModeToggle.checked ? "enforced" : "autonomous";
-    try {
-      const resp = await fetch(`${BASE_URL}/v1/settings/hitl_mode`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: newMode })
-      });
-      const data = await resp.json();
-      currentMode = data.mode;
-      updateModeUI();
-    } catch (e) {
-      alert("Failed to update HITL mode: " + e.message);
-      hitlModeToggle.checked = currentMode === "enforced";
-    }
-  });
-
-  function updateModeUI() {
-    hitlModeToggle.checked = currentMode === "enforced";
-    if (currentMode === "enforced") {
-      modeStatusText.textContent = "🛡️ Guardrail Mode (HITL ON)";
-      modeStatusText.style.color = "#10b981";
-    } else {
-      modeStatusText.textContent = "⚡ 24/7 Autonomous (HITL OFF)";
-      modeStatusText.style.color = "#a855f7";
-    }
+  if (settingsHitlToggle) {
+    settingsHitlToggle.addEventListener("change", async () => {
+      const newMode = settingsHitlToggle.checked ? "enforced" : "autonomous";
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/settings/hitl_mode`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: newMode })
+        });
+        const data = await resp.json();
+        currentMode = data.mode;
+        updateModeUI();
+      } catch (e) {
+        alert("Failed to update HITL mode: " + e.message);
+      }
+    });
   }
 
   // --- Thread & Conversation Persistence ---
