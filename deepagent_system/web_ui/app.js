@@ -106,8 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // Update Settings View Component Health Grid
       const statDb = document.getElementById("health-stat-db");
       const statLlm = document.getElementById("health-stat-llm");
-      const statAnsible = document.getElementById("health-stat-ansible");
-      const statSop = document.getElementById("health-stat-sop");
+      const statSupervisor = document.getElementById("health-stat-supervisor");
 
       if (statDb) {
         const isDbUp = data.database?.status === "healthy";
@@ -119,15 +118,9 @@ document.addEventListener("DOMContentLoaded", () => {
         statLlm.innerHTML = isLlmUp ? `🟢 Online (${data.llm_gateway?.provider || 'LLM'})` : "🔴 Degraded";
         statLlm.style.color = isLlmUp ? "#10b981" : "#ef4444";
       }
-      if (statAnsible && data.mcp_servers?.ansible) {
-        const isAnsUp = data.mcp_servers.ansible.status === "healthy";
-        statAnsible.innerHTML = isAnsUp ? `🟢 Online (${data.mcp_servers.ansible.latency_ms || 0}ms)` : "🔴 Offline";
-        statAnsible.style.color = isAnsUp ? "#10b981" : "#ef4444";
-      }
-      if (statSop && data.mcp_servers?.sop) {
-        const isSopUp = data.mcp_servers.sop.status === "healthy";
-        statSop.innerHTML = isSopUp ? `🟢 Online (${data.mcp_servers.sop.latency_ms || 0}ms)` : "🔴 Offline";
-        statSop.style.color = isSopUp ? "#10b981" : "#ef4444";
+      if (statSupervisor) {
+        statSupervisor.innerHTML = isHealthy ? "🟢 Operational (15s loop)" : "🔴 Degraded";
+        statSupervisor.style.color = isHealthy ? "#10b981" : "#ef4444";
       }
     } catch (e) {
       if (supervisorText) supervisorText.textContent = "Supervisor: Offline";
