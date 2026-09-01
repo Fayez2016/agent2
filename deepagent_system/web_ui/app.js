@@ -614,10 +614,14 @@ document.addEventListener("DOMContentLoaded", () => {
             <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; padding: 3px 8px;">Active Lead Agent</span>
           </div>
           <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 10px;">${escapeHtml(currentAgent.description || '')}</div>
-          <details style="background: #0f172a; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px;">
-            <summary style="font-size: 12px; font-weight: 600; color: #60a5fa; cursor: pointer;">🔍 View Lead Orchestrator System Prompt</summary>
-            <pre style="margin-top: 8px; font-size: 11px; color: #94a3b8; white-space: pre-wrap; font-family: var(--font-mono); max-height: 180px; overflow-y: auto;">${escapeHtml(currentAgent.system_prompt)}</pre>
-          </details>
+          <div style="background: #0f172a; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 12px; font-weight: 600; color: #60a5fa;">✏️ Lead Orchestrator System Prompt</span>
+              <button onclick="saveAgentPrompt('${currentAgent.key_name}')" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 4px; cursor: pointer;">Save Prompt Changes</button>
+            </div>
+            <textarea id="edit-agent-prompt-${currentAgent.key_name}" rows="5" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #f8fafc; font-size: 11px; padding: 8px; border-radius: 4px; outline: none; font-family: var(--font-mono);">${escapeHtml(currentAgent.system_prompt)}</textarea>
+            <div id="save-prompt-status-${currentAgent.key_name}" style="font-size: 11px; margin-top: 4px;"></div>
+          </div>
         `;
 
         if (subListEl) {
@@ -640,9 +644,17 @@ document.addEventListener("DOMContentLoaded", () => {
                   </div>
                 </div>
 
-                <details style="margin-top: 8px; background: #0f172a; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 4px; padding: 6px 10px;">
-                  <summary style="font-size: 11px; font-weight: 600; color: #a855f7; cursor: pointer;">📜 Subagent System Prompt</summary>
-                  <pre style="margin-top: 6px; font-size: 10px; color: #94a3b8; white-space: pre-wrap; font-family: var(--font-mono); max-height: 140px; overflow-y: auto;">${escapeHtml(sub.system_prompt)}</pre>
+                <details style="margin-top: 8px; background: #0f172a; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 4px; padding: 8px 10px;">
+                  <summary style="font-size: 11px; font-weight: 600; color: #a855f7; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                    <span>📜 Subagent System Prompt</span>
+                    <span style="font-size: 10px; color: #94a3b8;">Click to Edit</span>
+                  </summary>
+                  <div style="margin-top: 6px;">
+                    <textarea id="edit-sub-prompt-${sub.id}" rows="4" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #cbd5e1; font-size: 10px; padding: 6px; border-radius: 4px; outline: none; font-family: var(--font-mono);">${escapeHtml(sub.system_prompt)}</textarea>
+                    <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+                      <button onclick="saveSubagentPrompt(${sub.id}, ${currentAgent.id}, '${sub.name}')" style="background: #a855f7; border: none; color: #fff; font-size: 10px; padding: 3px 8px; border-radius: 3px; cursor: pointer;">Save Subagent Prompt</button>
+                    </div>
+                  </div>
                 </details>
               </div>
             `).join("");
@@ -654,6 +666,63 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  window.saveAgentPrompt = async function(agentKey) {
+    const txt = document.getElementById(`edit-agent-prompt-${agentKey}`);
+    const statusEl = document.getElementById(`save-prompt-status-${agentKey}`);
+    if (!txt) return;
+    try {
+      const respAg = await fetch(`${BASE_URL}/v1/studio/agents`);
+      const dataAg = await respAg.json();
+      const cur = (dataAg.agents || []).find(a => a.key_name === agentKey);
+      if (!cur) return;
+
+      const resp = await fetch(`${BASE_URL}/v1/studio/agents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key_name: cur.key_name,
+          display_name: cur.display_name,
+          domain_category: cur.domain_category,
+          description: cur.description,
+          model_provider: cur.model_provider || "openrouter",
+          model_name: cur.model_name || "qwen/qwen-2.5-72b-instruct",
+          system_prompt: txt.value.trim()
+        })
+      });
+      const data = await resp.json();
+      if (data.status === "success" && statusEl) {
+        statusEl.innerHTML = `<span style="color: #10b981;">✓ System prompt updated successfully!</span>`;
+        setTimeout(() => { statusEl.innerHTML = ""; }, 3000);
+      }
+    } catch (e) {
+      alert("Failed to save agent prompt: " + e.message);
+    }
+  };
+
+  window.saveSubagentPrompt = async function(subId, parentAgentId, subName) {
+    const txt = document.getElementById(`edit-sub-prompt-${subId}`);
+    if (!txt) return;
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/studio/subagents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parent_agent_id: parentAgentId,
+          name: subName,
+          display_name: subName,
+          description: subName,
+          system_prompt: txt.value.trim()
+        })
+      });
+      const data = await resp.json();
+      if (data.status === "success") {
+        alert("✓ Subagent prompt updated successfully!");
+      }
+    } catch (e) {
+      alert("Failed to update subagent prompt: " + e.message);
+    }
+  };
+
   async function loadStudioSkills() {
     const listEl = document.getElementById("domain-skills-list");
     if (!listEl) return;
@@ -663,15 +732,27 @@ document.addEventListener("DOMContentLoaded", () => {
       const skills = data.skills || [];
 
       listEl.innerHTML = skills.map(sk => `
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 13px;">
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; font-size: 13px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <strong style="color: #38bdf8;">${escapeHtml(sk.display_name || sk.name)}</strong>
-            <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 10px; padding: 2px 6px;">${escapeHtml(sk.domain_category)}</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 10px; padding: 2px 6px;">${escapeHtml(sk.domain_category)}</span>
+              <button onclick="deleteSkillRecord('${sk.name}')" style="background: none; border: none; color: #ef4444; font-size: 12px; cursor: pointer;" title="Delete SOP">🗑️</button>
+            </div>
           </div>
           <div style="color: #94a3b8; font-size: 11px; margin-top: 4px;">${escapeHtml(sk.description || '')}</div>
-          <details style="margin-top: 6px; background: #0f172a; border-radius: 4px; padding: 4px 8px;">
-            <summary style="font-size: 11px; color: #64748b; cursor: pointer;">View Markdown SOP</summary>
-            <pre style="margin-top: 6px; font-size: 10px; color: #94a3b8; white-space: pre-wrap;">${escapeHtml(sk.content_markdown)}</pre>
+          
+          <details style="margin-top: 8px; background: #0f172a; border-radius: 4px; padding: 6px 10px;">
+            <summary style="font-size: 11px; font-weight: 600; color: #0284c7; cursor: pointer; display: flex; justify-content: space-between;">
+              <span>View & Edit Markdown SOP</span>
+              <span style="font-size: 10px; color: #94a3b8;">Click to Edit</span>
+            </summary>
+            <div style="margin-top: 6px;">
+              <textarea id="edit-skill-md-${sk.name}" rows="6" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #cbd5e1; font-size: 10px; padding: 6px; border-radius: 4px; outline: none; font-family: var(--font-mono);">${escapeHtml(sk.content_markdown)}</textarea>
+              <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+                <button onclick="saveSkillMarkdown('${sk.name}', '${escapeHtml(sk.domain_category)}')" style="background: #0284c7; border: none; color: #fff; font-size: 10px; padding: 3px 8px; border-radius: 3px; cursor: pointer;">Save SOP Markdown</button>
+              </div>
+            </div>
           </details>
         </div>
       `).join("");
@@ -679,6 +760,40 @@ document.addEventListener("DOMContentLoaded", () => {
       listEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load skills: ${e.message}</div>`;
     }
   }
+
+  window.saveSkillMarkdown = async function(skillName, domainCategory) {
+    const txt = document.getElementById(`edit-skill-md-${skillName}`);
+    if (!txt) return;
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/studio/skills`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: skillName,
+          display_name: skillName,
+          domain_category: domainCategory,
+          description: skillName,
+          content_markdown: txt.value.trim()
+        })
+      });
+      const data = await resp.json();
+      if (data.status === "success") {
+        alert("✓ SOP Markdown updated successfully!");
+      }
+    } catch (e) {
+      alert("Failed to save SOP: " + e.message);
+    }
+  };
+
+  window.deleteSkillRecord = async function(skillName) {
+    if (!confirm(`Are you sure you want to delete SOP Skill '${skillName}'?`)) return;
+    try {
+      await fetch(`${BASE_URL}/v1/studio/skills/${skillName}`, { method: "DELETE" });
+      await loadStudioSkills();
+    } catch (e) {
+      alert("Failed to delete SOP skill: " + e.message);
+    }
+  };
 
   refreshAuditBtn.addEventListener("click", loadAuditHistory);
 
