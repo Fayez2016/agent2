@@ -155,6 +155,46 @@ def test_studio_crud_and_mcp_ping():
     assert len(skills) >= 2, "Skills not populated"
     print(f" [PASS] Listed {len(skills)} declarative skills from PostgreSQL: {[s['name'] for s in skills]}")
 
+def test_event_batcher_and_high_concurrency():
+    log_header("TEST 5: 5-Minute Event Deduplicator Subagent & Alert Storm Ingestion")
+    
+    # 1. Simulate alert storm of 50 webhook alarms on 5 distinct targets
+    targets = ["ha_cluster1_node1", "ha_cluster2_node1", "ha_cluster3_node1", "rhel-prod-04", "rhel-prod-08"]
+    alarm_types = ["CPU_THROTTLING_ALARM", "HIGH_MEMORY_PRESSURE", "COROSYNC_TOKEN_LOSS", "DISK_INODE_FULL"]
+    
+    raw_events = []
+    for i in range(50):
+        raw_events.append({
+            "host_target": targets[i % len(targets)],
+            "alert_type": alarm_types[i % len(alarm_types)],
+            "severity": "critical" if i % 4 == 0 else "warning",
+            "domain": "linux",
+            "payload": {"source": "Dynatrace", "alarm_seq": i}
+        })
+
+    # Bulk Ingestion
+    res = requests.post(f"{API_HOST}/v1/events/bulk", json={"events": raw_events, "domain": "linux"})
+    assert res.status_code == 200, f"Bulk ingestion failed: {res.text}"
+    ingested_count = res.json().get("count", 0)
+    assert ingested_count == 50, f"Expected 50 events ingested, got {ingested_count}"
+    print(f" [PASS] Successfully buffered {ingested_count} high-frequency webhook alarms in PostgreSQL buffer.")
+
+    # Query Buffer
+    res = requests.get(f"{API_HOST}/v1/events/pending?domain=linux")
+    assert res.status_code == 200, f"Failed to get pending events: {res.text}"
+    pending = res.json().get("events", [])
+    assert len(pending) >= 50, f"Expected at least 50 pending events, got {len(pending)}"
+    print(f" [PASS] Verified PostgreSQL pending buffer table has {len(pending)} unprocessed rows.")
+
+    # Trigger Event Batcher Deduplication Subagent Logic
+    res = requests.post(f"{API_HOST}/v1/events/process_batch?domain=linux")
+    assert res.status_code == 200, f"Batch processing failed: {res.text}"
+    manifest = res.json().get("manifest", {})
+    assert manifest.get("total_raw_events") >= 50, "Raw events not counted"
+    assert manifest.get("deduplicated_count") == len(targets), f"Expected {len(targets)} targets, got {manifest.get('deduplicated_count')}"
+    print(f" [PASS] Event Batcher successfully deduplicated {manifest.get('total_raw_events')} raw alarms into {manifest.get('deduplicated_count')} clean target nodes.")
+    print(f" [PASS] Deduplication Summary: {manifest.get('summary')}")
+
 def main():
     print("==============================================================================")
     print(" 🚀 DEEP AGENT CONSOLIDATED TEST SUITE")
@@ -164,6 +204,7 @@ def main():
     try:
         test_system_settings()
         test_studio_crud_and_mcp_ping()
+        test_event_batcher_and_high_concurrency()
         test_ha_10_clusters_rolling_update()
         test_regular_fleet_patching()
         

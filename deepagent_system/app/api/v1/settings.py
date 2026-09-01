@@ -93,6 +93,10 @@ async def cleanup_database_endpoint(req: DBCleanupRequest):
                 h_count = HitlRepository.purge_all()
             stats["deleted_hitl_requests"] = h_count
 
+        return {"status": "success", "stats": stats}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database cleanup failed: {e}")
+
 class SMTPSettingsRequest(BaseModel):
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
