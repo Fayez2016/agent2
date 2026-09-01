@@ -274,6 +274,8 @@ document.addEventListener("DOMContentLoaded", () => {
       await fetchNotificationEmail();
       await fetchHitlMode();
       await fetchSMTPSettings();
+      await loadApiTokensList();
+      await loadUsersList();
     });
   }
 
@@ -497,6 +499,208 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     });
+  }
+
+  // --- Scoped API Tokens Handlers (Step 9) ---
+  const showGenTokenBtn = document.getElementById("show-gen-token-btn");
+  const genTokenFormCard = document.getElementById("gen-token-form-card");
+  const cancelGenTokenBtn = document.getElementById("cancel-gen-token-btn");
+  const submitGenTokenBtn = document.getElementById("submit-gen-token-btn");
+  const newTokenNameInput = document.getElementById("new-token-name");
+  const newTokenDomainSelect = document.getElementById("new-token-domain");
+  const newTokenExpirySelect = document.getElementById("new-token-expiry");
+  const genTokenStatus = document.getElementById("gen-token-status");
+  const newTokenDisplayBox = document.getElementById("new-token-display-box");
+  const newTokenSecretVal = document.getElementById("new-token-secret-val");
+  const copyTokenBtn = document.getElementById("copy-token-btn");
+
+  if (showGenTokenBtn && genTokenFormCard) {
+    showGenTokenBtn.addEventListener("click", () => {
+      genTokenFormCard.style.display = genTokenFormCard.style.display === "none" ? "block" : "none";
+    });
+  }
+
+  if (cancelGenTokenBtn && genTokenFormCard) {
+    cancelGenTokenBtn.addEventListener("click", () => {
+      genTokenFormCard.style.display = "none";
+    });
+  }
+
+  if (copyTokenBtn && newTokenSecretVal) {
+    copyTokenBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(newTokenSecretVal.value);
+      copyTokenBtn.textContent = "✓ Copied!";
+      setTimeout(() => { copyTokenBtn.textContent = "📋 Copy"; }, 2000);
+    });
+  }
+
+  if (submitGenTokenBtn) {
+    submitGenTokenBtn.addEventListener("click", async () => {
+      const name = (newTokenNameInput.value || "").trim();
+      if (!name) {
+        alert("Please enter a name for the token.");
+        return;
+      }
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/auth/tokens`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name,
+            domain_category: newTokenDomainSelect.value,
+            expiry_option: newTokenExpirySelect.value
+          })
+        });
+        const data = await resp.json();
+        if (data.status === "success" && data.token_record) {
+          genTokenFormCard.style.display = "none";
+          newTokenNameInput.value = "";
+          if (newTokenDisplayBox && newTokenSecretVal) {
+            newTokenDisplayBox.style.display = "block";
+            newTokenSecretVal.value = data.token_record.raw_token;
+          }
+          await loadApiTokensList();
+        } else {
+          alert("Failed to generate token: " + data.detail);
+        }
+      } catch (e) {
+        alert("Token generation error: " + e.message);
+      }
+    });
+  }
+
+  async function loadApiTokensList() {
+    const listEl = document.getElementById("api-tokens-list");
+    if (!listEl) return;
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/auth/tokens`);
+      const data = await resp.json();
+      const tokens = data.tokens || [];
+
+      if (tokens.length === 0) {
+        listEl.innerHTML = `<div style="color: #64748b; font-size: 12px; padding: 6px;">No scoped API tokens generated yet.</div>`;
+        return;
+      }
+
+      listEl.innerHTML = tokens.map(t => {
+        const isExpired = t.expires_at && new Date(t.expires_at) < new Date();
+        const statusBadge = isExpired 
+          ? `<span style="background: rgba(239, 68, 68, 0.15); color: #f87171; font-size: 10px; padding: 2px 6px; border-radius: 4px;">Expired</span>`
+          : (t.is_active ? `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 10px; padding: 2px 6px; border-radius: 4px;">Active</span>` : `<span style="background: rgba(100, 116, 139, 0.15); color: #94a3b8; font-size: 10px; padding: 2px 6px; border-radius: 4px;">Revoked</span>`);
+
+        return `
+          <div style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <strong style="color: #f8fafc;">${escapeHtml(t.name)}</strong>
+                ${statusBadge}
+                <span class="badge" style="background: rgba(139, 92, 246, 0.15); color: #c084fc; font-size: 10px; padding: 1px 5px;">${escapeHtml(t.domain_category)}</span>
+              </div>
+              <div style="color: #64748b; font-size: 11px; margin-top: 3px;">
+                Expires: ${t.expires_at ? new Date(t.expires_at).toLocaleDateString() : 'Never'} | Last used: ${t.last_used_at ? new Date(t.last_used_at).toLocaleTimeString() : 'Never'}
+              </div>
+            </div>
+            ${t.is_active && !isExpired ? `<button onclick="revokeApiToken(${t.id})" style="background: none; border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer;">Revoke</button>` : ''}
+          </div>
+        `;
+      }).join("");
+    } catch (e) {
+      listEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load tokens: ${e.message}</div>`;
+    }
+  }
+
+  window.revokeApiToken = async function(tokenId) {
+    if (!confirm("Revoke this API token immediately?")) return;
+    try {
+      await fetch(`${BASE_URL}/v1/auth/tokens/${tokenId}`, { method: "DELETE" });
+      await loadApiTokensList();
+    } catch (e) {
+      alert("Failed to revoke token: " + e.message);
+    }
+  };
+
+  // --- User Management Handlers (Step 9) ---
+  const showAddUserBtn = document.getElementById("show-add-user-btn");
+  const addUserFormCard = document.getElementById("add-user-form-card");
+  const cancelAddUserBtn = document.getElementById("cancel-add-user-btn");
+  const submitAddUserBtn = document.getElementById("submit-add-user-btn");
+  const newUserNameInput = document.getElementById("new-user-name");
+  const newUserPassInput = document.getElementById("new-user-pass");
+  const newUserRoleSelect = document.getElementById("new-user-role");
+  const newUserEmailInput = document.getElementById("new-user-email");
+
+  if (showAddUserBtn && addUserFormCard) {
+    showAddUserBtn.addEventListener("click", () => {
+      addUserFormCard.style.display = addUserFormCard.style.display === "none" ? "block" : "none";
+    });
+  }
+
+  if (cancelAddUserBtn && addUserFormCard) {
+    cancelAddUserBtn.addEventListener("click", () => {
+      addUserFormCard.style.display = "none";
+    });
+  }
+
+  if (submitAddUserBtn) {
+    submitAddUserBtn.addEventListener("click", async () => {
+      const username = (newUserNameInput.value || "").trim();
+      const password = (newUserPassInput.value || "").trim();
+      if (!username || !password) {
+        alert("Please enter username and password.");
+        return;
+      }
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/auth/users`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: username,
+            password: password,
+            role: newUserRoleSelect.value,
+            email: (newUserEmailInput.value || "").trim()
+          })
+        });
+        const data = await resp.json();
+        if (data.status === "success") {
+          addUserFormCard.style.display = "none";
+          newUserNameInput.value = "";
+          newUserPassInput.value = "";
+          newUserEmailInput.value = "";
+          await loadUsersList();
+        } else {
+          alert("Failed to create user: " + data.detail);
+        }
+      } catch (e) {
+        alert("User creation error: " + e.message);
+      }
+    });
+  }
+
+  async function loadUsersList() {
+    const listEl = document.getElementById("users-list-grid");
+    if (!listEl) return;
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/auth/users`);
+      const data = await resp.json();
+      const users = data.users || [];
+
+      listEl.innerHTML = users.map(u => `
+        <div style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <strong style="color: #f8fafc;">${escapeHtml(u.username)}</strong>
+              <span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; font-size: 10px; padding: 1px 5px;">${escapeHtml(u.role)}</span>
+            </div>
+            <div style="color: #64748b; font-size: 11px; margin-top: 3px;">
+              ${escapeHtml(u.email || 'No email set')}
+            </div>
+          </div>
+          <span style="font-size: 11px; color: #10b981;">🟢 Active</span>
+        </div>
+      `).join("");
+    } catch (e) {
+      listEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load users: ${e.message}</div>`;
+    }
   }
 
   if (refreshStudioBtn) {

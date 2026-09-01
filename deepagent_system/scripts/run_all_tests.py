@@ -406,6 +406,65 @@ def test_dynamic_random_alert_disambiguation():
 
     print("\n [PASS] Dynamic Alert Disambiguation verified: Deep Agent successfully correlated cascading DB failure and isolated unrelated SSL/Inode problems.")
 
+def test_auth_rbac_and_scoped_tokens():
+    log_header("TEST 9: Enterprise Authentication, RBAC User Management & Scoped API Token Generator")
+
+    # 1. Operator Login
+    login_res = requests.post(f"{API_HOST}/v1/auth/login", json={"username": "admin", "password": "admin123"})
+    assert login_res.status_code == 200, f"Login failed: {login_res.text}"
+    login_data = login_res.json()
+    assert login_data.get("status") == "success", "Login status not success"
+    session_token = login_data.get("session_token")
+    assert session_token is not None, "Missing session token"
+    print(f" [PASS] Operator Login verified: authenticated as '{login_data['user']['username']}' (role: {login_data['user']['role']}).")
+
+    # 2. Whoami / /v1/auth/me Verification
+    me_res = requests.get(f"{API_HOST}/v1/auth/me", headers={"Authorization": f"Bearer {session_token}"})
+    assert me_res.status_code == 200, f"Auth verification failed: {me_res.text}"
+    assert me_res.json()["user"]["username"] == "admin"
+    print(" [PASS] Bearer session token verified via /v1/auth/me.")
+
+    # 3. Create New SRE Operator User
+    new_user_payload = {
+        "username": "sre_operator_test",
+        "password": "Password123!",
+        "role": "operator",
+        "email": "sre.operator@enterprise.internal"
+    }
+    create_user_res = requests.post(f"{API_HOST}/v1/auth/users", json=new_user_payload)
+    assert create_user_res.status_code == 200, f"Failed to create user: {create_user_res.text}"
+    print(f" [PASS] Created new enterprise user 'sre_operator_test' with role 'operator'.")
+
+    # 4. Generate Scoped API Token for SIEM / Monitoring Webhooks
+    token_payload = {
+        "name": "Dynatrace SRE Alert Webhook",
+        "scope": "read_write",
+        "domain_category": "linux",
+        "expiry_option": "30d"
+    }
+    gen_token_res = requests.post(f"{API_HOST}/v1/auth/tokens", json=token_payload)
+    assert gen_token_res.status_code == 200, f"Token generation failed: {gen_token_res.text}"
+    token_record = gen_token_res.json().get("token_record", {})
+    raw_api_key = token_record.get("raw_token")
+    token_id = token_record.get("id")
+    assert raw_api_key is not None and raw_api_key.startswith("da_sec_"), "Invalid raw API key format"
+    print(f" [PASS] Generated 30-day scoped API key: '{token_record['name']}' (Expires: {token_record['expires_at']}).")
+
+    # 5. Authenticate via Generated Scoped API Token
+    api_auth_res = requests.get(f"{API_HOST}/v1/auth/me", headers={"Authorization": f"Bearer {raw_api_key}"})
+    assert api_auth_res.status_code == 200, f"Scoped token validation failed: {api_auth_res.text}"
+    assert api_auth_res.json().get("type") == "api_token"
+    print(" [PASS] Validated external webhook authorization using generated Scoped API token.")
+
+    # 6. Revoke Scoped API Token
+    revoke_res = requests.delete(f"{API_HOST}/v1/auth/tokens/{token_id}")
+    assert revoke_res.status_code == 200, f"Failed to revoke token: {revoke_res.text}"
+    
+    # Assert revoked token is rejected
+    revoked_auth_res = requests.get(f"{API_HOST}/v1/auth/me", headers={"Authorization": f"Bearer {raw_api_key}"})
+    assert revoked_auth_res.status_code == 401, "Revoked token was unexpectedly accepted"
+    print(f" [PASS] Revocation verified: revoked token is immediately rejected by API security filter.")
+
 def main():
     print("==============================================================================")
     print(" 🚀 DEEP AGENT CONSOLIDATED TEST SUITE")
@@ -419,6 +478,7 @@ def main():
         test_event_batcher_and_high_concurrency()
         test_multidomain_alert_ingestion_and_simulation()
         test_dynamic_random_alert_disambiguation()
+        test_auth_rbac_and_scoped_tokens()
         test_ha_10_clusters_rolling_update()
         test_regular_fleet_patching()
         

@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
-    <link rel="stylesheet" href="/style.css?v=17.0" />
+    <link rel="stylesheet" href="/style.css?v=18.0" />
   </head>
   <body>
     <div class="app-container">
@@ -511,7 +511,113 @@
               </div>
             </div>
 
-            <!-- Setting 4: Database Cleanup & Maintenance -->
+            <!-- Setting 4: Scoped API Token Generator (Step 9) -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                  <span>🔑</span> Scoped API Tokens & Webhook Integrations
+                </h4>
+                <button id="show-gen-token-btn" style="background: #8b5cf6; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Generate Token</button>
+              </div>
+              <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Create secure Bearer tokens with configurable scopes and expiration periods for external SIEM / Prometheus / Dynatrace webhooks.</p>
+
+              <!-- Token Generation Form (Collapsible) -->
+              <div id="gen-token-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(139, 92, 246, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px;">
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Token Name</label>
+                    <input type="text" id="new-token-name" placeholder="e.g. Dynatrace Webhook Ingestion" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Domain Scope</label>
+                    <select id="new-token-domain" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 4px; outline: none;">
+                      <option value="all">All Domains</option>
+                      <option value="linux">Linux SRE</option>
+                      <option value="windows">Windows</option>
+                      <option value="vmware">VMware</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Expiration</label>
+                    <select id="new-token-expiry" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 4px; outline: none;">
+                      <option value="30d">30 Days</option>
+                      <option value="7d">7 Days</option>
+                      <option value="90d">90 Days</option>
+                      <option value="1y">1 Year</option>
+                      <option value="never">Never (Persistent)</option>
+                    </select>
+                  </div>
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+                  <button id="submit-gen-token-btn" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 4px; cursor: pointer;">Generate Key</button>
+                  <button id="cancel-gen-token-btn" style="background: #475569; border: none; color: #fff; font-size: 11px; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                  <span id="gen-token-status" style="font-size: 11px;"></span>
+                </div>
+              </div>
+
+              <!-- Generated Token Display Modal -->
+              <div id="new-token-display-box" style="display: none; background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <div style="color: #34d399; font-size: 12px; font-weight: 600; margin-bottom: 4px;">✓ New Scoped API Key Generated (Copy now, will not be shown again):</div>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="new-token-secret-val" readonly style="flex: 1; background: #0f172a; border: 1px solid #334155; color: #38bdf8; font-family: monospace; font-size: 12px; padding: 6px 10px; border-radius: 4px;" />
+                  <button id="copy-token-btn" style="background: #3b82f6; border: none; color: #fff; font-size: 11px; padding: 6px 12px; border-radius: 4px; cursor: pointer;">📋 Copy</button>
+                </div>
+              </div>
+
+              <!-- Tokens List -->
+              <div id="api-tokens-list" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+
+            <!-- Setting 5: User Management & Operator Roles (Step 9) -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                  <span>👥</span> Operator Accounts & RBAC Roles
+                </h4>
+                <button id="show-add-user-btn" style="background: #0284c7; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add User</button>
+              </div>
+              <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Manage human operators, SRE on-call accounts, and administrator permissions.</p>
+
+              <!-- Add User Form (Collapsible) -->
+              <div id="add-user-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(2, 132, 199, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Username</label>
+                    <input type="text" id="new-user-name" placeholder="e.g. jdoe" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Password</label>
+                    <input type="password" id="new-user-pass" placeholder="••••••••" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Role</label>
+                    <select id="new-user-role" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 4px; outline: none;">
+                      <option value="operator">Operator (HITL Approvals)</option>
+                      <option value="admin">Administrator (Full Access)</option>
+                      <option value="viewer">Viewer (Read-Only)</option>
+                    </select>
+                  </div>
+                </div>
+                <div style="margin-top: 8px;">
+                  <label style="font-size: 11px; color: #94a3b8; display: block;">Email</label>
+                  <input type="email" id="new-user-email" placeholder="jdoe@enterprise.internal" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 4px; outline: none;" />
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+                  <button id="submit-add-user-btn" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 4px; cursor: pointer;">Save Account</button>
+                  <button id="cancel-add-user-btn" style="background: #475569; border: none; color: #fff; font-size: 11px; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                  <span id="add-user-status" style="font-size: 11px;"></span>
+                </div>
+              </div>
+
+              <!-- Users List -->
+              <div id="users-list-grid" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+
+            <!-- Setting 6: Database Cleanup & Maintenance -->
             <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
               <h4 style="font-size: 15px; color: #f8fafc;">🧹 Database Maintenance & Cleanup</h4>
               <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Purge old session histories, cached threads, and completed test approvals from PostgreSQL.</p>
@@ -545,6 +651,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/app.js?v=17.0"></script>
+    <script src="/app.js?v=18.0"></script>
   </body>
 </html>

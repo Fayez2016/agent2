@@ -9,6 +9,7 @@ from app.api.v1.settings import router as settings_router
 from app.api.v1.threads import router as threads_router
 from app.api.v1.studio import router as studio_router
 from app.api.v1.events import router as events_router
+from app.api.v1.auth import router as auth_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -36,6 +37,7 @@ app.include_router(settings_router)
 app.include_router(threads_router)
 app.include_router(studio_router)
 app.include_router(events_router)
+app.include_router(auth_router)
 
 @app.on_event("startup")
 async def on_startup():
