@@ -195,6 +195,50 @@ def test_event_batcher_and_high_concurrency():
     print(f" [PASS] Event Batcher successfully deduplicated {manifest.get('total_raw_events')} raw alarms into {manifest.get('deduplicated_count')} clean target nodes.")
     print(f" [PASS] Deduplication Summary: {manifest.get('summary')}")
 
+def test_dynamic_mcp_and_agent_factory():
+    log_header("TEST 6: Zero-Code Dynamic Agent & FastMCP Server Registration")
+    
+    # 1. Dynamically Register a New FastMCP Server via REST API
+    test_mcp_payload = {
+        "name": "dynamic_test_mcp",
+        "display_name": "Dynamic Diagnostics FastMCP",
+        "domain_scope": "linux",
+        "url": "http://deepagent-ansible-mcp:8000/mcp",
+        "transport": "streamable_http"
+    }
+    res = requests.post(f"{API_HOST}/v1/studio/mcp_servers", json=test_mcp_payload)
+    assert res.status_code == 200, f"Failed to add dynamic MCP: {res.text}"
+    print(" [PASS] Dynamically registered new FastMCP server 'dynamic_test_mcp' in PostgreSQL.")
+
+    # 2. Live Ping Connection without Restart
+    res = requests.post(f"{API_HOST}/v1/studio/mcp_servers/dynamic_test_mcp/ping")
+    assert res.status_code == 200, f"Failed to ping dynamic MCP: {res.text}"
+    ping_data = res.json()
+    assert ping_data.get("status") == "connected", f"MCP ping failed: {ping_data}"
+    assert ping_data.get("live_tools_count", 0) >= 20, "Live tools not discovered"
+    print(f" [PASS] Live ping successful on dynamically added MCP: {ping_data.get('live_tools_count')} tools active.")
+
+    # 3. Dynamically Register a New Main Domain Agent via REST API
+    test_agent_payload = {
+        "key_name": "database_admin",
+        "display_name": "PostgreSQL & Database SRE",
+        "domain_category": "database",
+        "description": "Automated database maintenance and query optimization",
+        "model_provider": "openrouter",
+        "model_name": "qwen/qwen-2.5-72b-instruct",
+        "system_prompt": "You are the Database Administrator SRE. You specialize in zero-downtime maintenance."
+    }
+    res = requests.post(f"{API_HOST}/v1/studio/agents", json=test_agent_payload)
+    assert res.status_code == 200, f"Failed to create agent: {res.text}"
+    print(" [PASS] Dynamically created Main Domain Agent 'database_admin' in PostgreSQL.")
+
+    # 4. Clean up test records
+    res_del_mcp = requests.delete(f"{API_HOST}/v1/studio/mcp_servers/dynamic_test_mcp")
+    assert res_del_mcp.status_code == 200
+    res_del_ag = requests.delete(f"{API_HOST}/v1/studio/agents/database_admin")
+    assert res_del_ag.status_code == 200
+    print(" [PASS] Cleaned up dynamic test MCP and agent records.")
+
 def main():
     print("==============================================================================")
     print(" 🚀 DEEP AGENT CONSOLIDATED TEST SUITE")
@@ -204,6 +248,7 @@ def main():
     try:
         test_system_settings()
         test_studio_crud_and_mcp_ping()
+        test_dynamic_mcp_and_agent_factory()
         test_event_batcher_and_high_concurrency()
         test_ha_10_clusters_rolling_update()
         test_regular_fleet_patching()

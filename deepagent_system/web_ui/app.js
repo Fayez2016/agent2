@@ -266,6 +266,78 @@ document.addEventListener("DOMContentLoaded", () => {
     await Promise.all([loadStudioMCPServers(), loadStudioAgents(), loadStudioSkills()]);
   }
 
+  // --- Add MCP Server UI Handlers ---
+  const showAddMcpBtn = document.getElementById("show-add-mcp-btn");
+  const addMcpFormCard = document.getElementById("add-mcp-form-card");
+  const cancelAddMcpBtn = document.getElementById("cancel-add-mcp-btn");
+  const saveNewMcpBtn = document.getElementById("save-new-mcp-btn");
+  const newMcpNameInput = document.getElementById("new-mcp-name");
+  const newMcpDomainSelect = document.getElementById("new-mcp-domain");
+  const newMcpUrlInput = document.getElementById("new-mcp-url");
+  const addMcpStatus = document.getElementById("add-mcp-status");
+
+  if (showAddMcpBtn && addMcpFormCard) {
+    showAddMcpBtn.addEventListener("click", () => {
+      addMcpFormCard.style.display = addMcpFormCard.style.display === "none" ? "block" : "none";
+    });
+  }
+
+  if (cancelAddMcpBtn && addMcpFormCard) {
+    cancelAddMcpBtn.addEventListener("click", () => {
+      addMcpFormCard.style.display = "none";
+    });
+  }
+
+  if (saveNewMcpBtn) {
+    saveNewMcpBtn.addEventListener("click", async () => {
+      const name = (newMcpNameInput.value || "").trim().toLowerCase();
+      const url = (newMcpUrlInput.value || "").trim();
+      const domain = newMcpDomainSelect.value || "linux";
+
+      if (!name || !url) {
+        alert("Please provide both a server name and endpoint URL.");
+        return;
+      }
+
+      if (addMcpStatus) {
+        addMcpStatus.textContent = "⏳ Saving...";
+        addMcpStatus.style.color = "#fbbf24";
+      }
+
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/studio/mcp_servers`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name,
+            display_name: name.toUpperCase() + " FastMCP",
+            domain_scope: domain,
+            url: url,
+            transport: "streamable_http"
+          })
+        });
+        const data = await resp.json();
+        if (data.status === "success") {
+          if (addMcpStatus) {
+            addMcpStatus.textContent = "✓ Connected & Saved";
+            addMcpStatus.style.color = "#10b981";
+          }
+          newMcpNameInput.value = "";
+          newMcpUrlInput.value = "";
+          setTimeout(() => {
+            addMcpFormCard.style.display = "none";
+            if (addMcpStatus) addMcpStatus.textContent = "";
+          }, 1500);
+          await loadStudioMCPServers();
+        } else {
+          alert("Failed to save MCP server: " + data.detail);
+        }
+      } catch (e) {
+        alert("Error saving MCP server: " + e.message);
+      }
+    });
+  }
+
   async function loadStudioMCPServers() {
     const listEl = document.getElementById("mcp-servers-list");
     if (!listEl) return;
@@ -278,7 +350,10 @@ document.addEventListener("DOMContentLoaded", () => {
         <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 13px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <strong style="color: #60a5fa;">${escapeHtml(s.display_name || s.name)}</strong>
-            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 10px; padding: 2px 6px;">${escapeHtml(s.domain_scope || 'linux')}</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 10px; padding: 2px 6px;">${escapeHtml(s.domain_scope || 'linux')}</span>
+              ${s.name !== 'ansible' && s.name !== 'sop' ? `<button onclick="deleteMCPServer('${s.name}')" style="background: none; border: none; color: #ef4444; font-size: 11px; cursor: pointer;" title="Remove MCP Server">🗑️</button>` : ''}
+            </div>
           </div>
           <div style="color: #94a3b8; font-size: 11px; margin-top: 4px; word-break: break-all;"><code>${escapeHtml(s.url)}</code></div>
           <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
@@ -292,6 +367,16 @@ document.addEventListener("DOMContentLoaded", () => {
       listEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load MCP servers: ${e.message}</div>`;
     }
   }
+
+  window.deleteMCPServer = async function(serverName) {
+    if (!confirm(`Are you sure you want to remove MCP server '${serverName}'?`)) return;
+    try {
+      await fetch(`${BASE_URL}/v1/studio/mcp_servers/${serverName}`, { method: "DELETE" });
+      await loadStudioMCPServers();
+    } catch (e) {
+      alert("Failed to delete MCP server: " + e.message);
+    }
+  };
 
   window.pingMCPServer = async function(serverName) {
     const target = document.getElementById(`mcp-ping-${serverName}`);

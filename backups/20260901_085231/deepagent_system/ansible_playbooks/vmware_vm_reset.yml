@@ -1,0 +1,20 @@
+---
+# Production Ansible Playbook: Out-of-Band VMware Virtual Machine Power Reset
+- name: Hard Power Reset Virtual Machine via VMware API
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Reset VM State
+      community.vmware.vmware_guest_powerstate:
+        hostname: "{{ vcenter_host | default('vcenter.enterprise.local') }}"
+        username: "{{ vcenter_user | default('administrator@vsphere.local') }}"
+        password: "{{ vcenter_password | default('secret') }}"
+        validate_certs: false
+        name: "{{ vm_name | default(hostname) }}"
+        state: reset
+      register: vm_reset_out
+      ignore_errors: true
+
+    - name: Report VM Reset Status
+      ansible.builtin.debug:
+        msg: "VMware reset successfully executed for VM {{ vm_name | default(hostname) }}."

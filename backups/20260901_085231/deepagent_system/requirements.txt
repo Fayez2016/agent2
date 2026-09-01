@@ -1,0 +1,17 @@
+deepagents>=0.7
+langgraph
+langchain
+langchain-community
+langchain-ollama
+langchain-openai
+langchain-mcp-adapters
+fastapi
+uvicorn
+httpx
+mcp
+pydantic
+pydantic-settings
+python-dotenv
+requests
+psycopg2-binary
+langgraph-cli[inmem]

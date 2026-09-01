@@ -1,0 +1,30 @@
+---
+# Production Ansible Playbook: RHEL High Availability Cluster Health Check
+# Validates Corosync ring, Pacemaker quorum, Stonith state, and active resources.
+- name: Inspect Pacemaker Cluster Health and Resources
+  hosts: "{{ target_hosts | default('all') }}"
+  gather_facts: false
+  tasks:
+    - name: Query PCS Cluster Status
+      ansible.builtin.command: pcs status --full
+      register: pcs_status_out
+      changed_when: false
+      failed_when: false
+
+    - name: Query PCS Cluster Properties
+      ansible.builtin.command: pcs property show
+      register: pcs_props_out
+      changed_when: false
+      failed_when: false
+
+    - name: Assert Pacemaker and Corosync are Active and Quorate
+      ansible.builtin.assert:
+        that:
+          - "'Corosync: active' in pcs_status_out.stdout or 'Cluster name:' in pcs_status_out.stdout"
+          - "'stonith-enabled' in pcs_props_out.stdout or 'stonith' in pcs_status_out.stdout"
+        fail_msg: "Cluster is not in a healthy or quorate state."
+        success_msg: "Cluster is active, stonith enabled, and quorate."
+
+    - name: Output Cluster Summary
+      ansible.builtin.debug:
+        msg: "Health Check: PASS - Cluster is quorate and resources are active."

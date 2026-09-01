@@ -196,9 +196,39 @@
               <!-- MCP Servers -->
               <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                  <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🔌</span> Registered FastMCP Servers</h3>
-                  <span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; font-size: 11px; padding: 2px 6px;">Live MCP</span>
+                  <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🔌</span> FastMCP Servers</h3>
+                  <button id="show-add-mcp-btn" style="background: var(--accent-color, #3b82f6); border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add MCP Server</button>
                 </div>
+                
+                <!-- Add MCP Server Form (Collapsible) -->
+                <div id="add-mcp-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                  <h4 style="font-size: 13px; color: #60a5fa; margin-bottom: 8px;">Connect New FastMCP Server</h4>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div>
+                      <label style="font-size: 11px; color: #94a3b8; display: block;">Server Name</label>
+                      <input type="text" id="new-mcp-name" placeholder="e.g. winrm_mcp" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
+                    </div>
+                    <div>
+                      <label style="font-size: 11px; color: #94a3b8; display: block;">Domain Scope</label>
+                      <select id="new-mcp-domain" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;">
+                        <option value="linux">linux</option>
+                        <option value="windows">windows</option>
+                        <option value="vmware">vmware</option>
+                        <option value="global">global</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style="margin-top: 8px;">
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Endpoint URL</label>
+                    <input type="text" id="new-mcp-url" placeholder="http://deepagent-winrm:8002/mcp" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                  <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+                    <button id="save-new-mcp-btn" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save Server</button>
+                    <button id="cancel-add-mcp-btn" style="background: #475569; border: none; color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                    <span id="add-mcp-status" style="font-size: 11px;"></span>
+                  </div>
+                </div>
+
                 <div id="mcp-servers-list" style="display: flex; flex-direction: column; gap: 10px;">
                   <!-- Dynamically populated -->
                 </div>

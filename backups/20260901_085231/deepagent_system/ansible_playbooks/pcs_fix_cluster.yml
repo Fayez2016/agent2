@@ -1,0 +1,14 @@
+---
+# Production Ansible Playbook: Fix PCS Cluster and Reset Resource Failcounts
+- name: Clean Up Failed Cluster Resources
+  hosts: "{{ hostname | default(inventory_hostname) }}"
+  gather_facts: false
+  tasks:
+    - name: Run PCS Resource Cleanup
+      ansible.builtin.command: pcs resource cleanup
+      register: cleanup_out
+      changed_when: cleanup_out.rc == 0
+
+    - name: Output Cluster Cleanup Status
+      ansible.builtin.debug:
+        msg: "Cluster resources cleaned up and failcounts reset on {{ inventory_hostname }}."

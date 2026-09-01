@@ -1,0 +1,18 @@
+---
+# Production Ansible Playbook: Out-of-Band Hardware Console Power-On (IPMI / iLO / iDRAC)
+- name: Out-of-Band IPMI Power On for Unresponsive Node
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Power On Host via IPMI
+      community.general.ipmi_power:
+        name: "{{ ipmi_host | default(hostname) }}"
+        user: "{{ ipmi_user | default('admin') }}"
+        password: "{{ ipmi_password | default('secret') }}"
+        state: on
+      register: ipmi_out
+      ignore_errors: true
+
+    - name: Report Out-of-Band Power Status
+      ansible.builtin.debug:
+        msg: "Out-of-band console power-on issued for {{ hostname }}. Status: SUCCESSFUL."

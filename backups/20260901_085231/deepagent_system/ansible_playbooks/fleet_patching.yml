@@ -1,0 +1,24 @@
+---
+# Production Ansible Playbook: Fleet Security & Package Patching
+# Applies latest DNF packages across fleet servers with transaction logging.
+- name: Apply Enterprise Package Updates
+  hosts: "{{ hostlist | default('all') }}"
+  gather_facts: false
+  tasks:
+    - name: Apply Available Updates via DNF
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+        security: "{{ security_only | default(false) }}"
+      register: dnf_update_result
+
+    - name: Check if Reboot is Required
+      ansible.builtin.command: needs-restarting -r
+      register: needs_restarting_out
+      changed_when: false
+      failed_when: false
+
+    - name: Log Patching Results
+      ansible.builtin.debug:
+        msg: "Patching completed on {{ inventory_hostname }}. Changed: {{ dnf_update_result.changed }}. Reboot required: {{ needs_restarting_out.rc == 1 }}"

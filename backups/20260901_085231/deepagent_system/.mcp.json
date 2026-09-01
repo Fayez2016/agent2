@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ansible-mcp": {
+      "type": "http",
+      "url": "http://deepagent-ansible-mcp:8000/mcp"
+    },
+    "sop-mcp": {
+      "type": "http",
+      "url": "http://deepagent-sop-mcp:8001/mcp"
+    }
+  }
+}

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
+    <link rel="stylesheet" href="/style.css?v=4.0" />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- Sidebar Panel -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="logo-area">
+            <div class="logo-icon">⚡</div>
+            <div class="logo-text">
+              <h1>Deep Agent</h1>
+              <p>Autonomous SRE</p>
+            </div>
+          </div>
+          <button id="new-chat-btn" class="new-chat-btn"><span>+</span> New</button>
+        </div>
+
+        <div class="sidebar-content">
+          <!-- Conversation Sessions -->
+          <div class="sidebar-section">
+            <h3>Saved Sessions</h3>
+            <div class="threads-list" id="threads-list">
+              <!-- Dynamically populated from PostgreSQL with Date-Time naming -->
+            </div>
+          </div>
+
+          <!-- Quick Action Chips -->
+          <div class="sidebar-section">
+            <h3>Quick Operations</h3>
+            <div class="quick-actions-list">
+              <button class="chip-btn" data-prompt="Using ha_cluster_patcher subagent, execute the Red Hat HA Rolling Update (SOP 2059253) across 10 HA clusters (ha_cluster1 to ha_cluster10). Discover nodes, apply wave 1 standby, patch, reboot with console recovery if needed, unstandby, isolate failures, and execute wave 2 on healthy clusters.">
+                <span>🔄</span> HA Rolling Update (10 Clusters)
+              </button>
+              <button class="chip-btn" data-prompt="Using fleet_patcher subagent, execute fleet patching on hosts rhel-prod-01 to rhel-prod-10: inspect server inventory, apply package updates, execute managed reboots, verify online status, and email report.">
+                <span>📦</span> Fleet Patching (10 Hosts)
+              </button>
+              <button class="chip-btn" data-prompt="Execute cluster health check on ha_cluster1 and ha_cluster2 and verify quorum, node membership, and fencing configuration.">
+                <span>🔍</span> Check Cluster Health
+              </button>
+              <button class="chip-btn" data-prompt="Delegate to the rhel_diagnostician subagent to inspect cluster health across all clusters.">
+                <span>🤖</span> Run Diagnostics Subagent
+              </button>
+            </div>
+          </div>
+
+          <!-- Subagents Directory -->
+          <div class="sidebar-section">
+            <h3>Active Subagents</h3>
+            <div class="subagent-badge-list">
+              <div class="subagent-item">
+                <div class="subagent-name"><span>🤖</span> ha_cluster_patcher</div>
+                <div class="subagent-desc">Zero-downtime Red Hat HA rolling updates per SOP 2059253 with reboot matrix and email reporting.</div>
+              </div>
+              <div class="subagent-item">
+                <div class="subagent-name"><span>🤖</span> fleet_patcher</div>
+                <div class="subagent-desc">Enterprise DNF package updates, managed reboots, uptime verification, and console recovery.</div>
+              </div>
+              <div class="subagent-item">
+                <div class="subagent-name"><span>🤖</span> rhel_diagnostician</div>
+                <div class="subagent-desc">Pre-patch node inspection and cluster diagnostic summaries.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="status-indicator">
+            <div class="status-dot"></div>
+            <span>Ansible MCP Bridge Active</span>
+          </div>
+          <span>:8000</span>
+        </div>
+      </aside>
+
+      <!-- Main Console -->
+      <main class="main-console">
+        <header class="console-header">
+          <!-- View Switcher Tabs -->
+          <div class="view-tabs">
+            <button class="tab-btn active" id="tab-chat">💬 Chat & Orchestration</button>
+            <button class="tab-btn" id="tab-audit">📜 Action Audit Trail</button>
+            <button class="tab-btn" id="tab-studio">⚙️ Linux SRE Studio</button>
+            <button class="tab-btn" id="tab-settings">⚙️ Settings</button>
+          </div>
+
+          <!-- Mode Indicator, Export & Hardware Badges -->
+          <div class="header-controls">
+            <!-- Export Incident Report -->
+            <button id="export-report-btn" class="export-btn" title="Export current session as Markdown/PDF report">
+              <span>📥</span> Export Report
+            </button>
+
+            <!-- HITL Status Badge Icon -->
+            <div id="hitl-indicator-badge" style="display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
+              <span id="hitl-badge-icon">🛡️</span>
+              <span id="hitl-badge-text">HITL Enforced</span>
+            </div>
+
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 4px 8px; border-radius: 4px; font-weight: 600;">NVIDIA RTX 3050 CUDA</span>
+          </div>
+        </header>
+
+        <!-- View 1: Chat Stream & Reasoning Console -->
+        <div id="chat-view" style="display: flex; flex-direction: column; flex: 1; height: calc(100vh - 65px);">
+          <div class="chat-stream" id="chat-messages">
+            <!-- Chronological Stream: User Prompt -> Tool Traces & HITL -> Final Synthesis Response -->
+          </div>
+
+          <div style="padding: 0 24px;">
+            <div class="loading-indicator" id="loading-indicator">
+              <div class="spinner"></div>
+              <span>Deep Agent reasoning & executing tools...</span>
+            </div>
+          </div>
+
+          <div class="console-input-area">
+            <form class="input-form" id="prompt-form">
+              <input
+                type="text"
+                id="user-input"
+                class="input-field"
+                placeholder="Enter operational instruction (e.g. Execute fleet patching on rhel-prod-01)..."
+                autocomplete="off"
+              />
+              <button type="submit" id="send-btn" class="send-btn">
+                Send Prompt ↵
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- View 2: Action Audit Trail View -->
+        <div id="audit-view" class="audit-view-container" style="display: none;">
+          <div class="audit-header">
+            <div>
+              <h2 style="font-size: 18px; color: #f8fafc;">PostgreSQL Action Audit Trail</h2>
+              <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Full compliance audit log of all infrastructure operations across Web UI, API endpoints, and CLI tests.</p>
+            </div>
+            <button class="refresh-btn" id="refresh-audit-btn">🔄 Refresh Audit Log</button>
+          </div>
+
+          <table class="audit-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Action Name</th>
+                <th>Target Parameters</th>
+                <th>Status</th>
+                <th>Requested At</th>
+                <th>Resolved At</th>
+              </tr>
+            </thead>
+            <tbody id="audit-table-body">
+              <!-- Dynamically populated from PostgreSQL -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- View 3: Linux SRE Agent Studio View -->
+        <div id="studio-view" class="audit-view-container" style="display: none; padding: 24px; overflow-y: auto;">
+          <div class="audit-header" style="margin-bottom: 20px;">
+            <div>
+              <h2 style="font-size: 20px; color: #f8fafc;">⚙️ Linux SRE Deep Agent Studio</h2>
+              <p style="font-size: 13px; color: #94a3b8; margin-top: 4px;">Inspect and configure the Linux SRE Lead Agent, FastMCP Tools, Subagent Prompts, and declarative SOP Skills.</p>
+            </div>
+            <button class="refresh-btn" id="refresh-studio-btn">🔄 Refresh Studio Data</button>
+          </div>
+
+          <!-- Linux SRE Main Agent Card -->
+          <div id="linux-main-agent-card" style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px; margin-bottom: 20px;">
+            <!-- Dynamically populated main prompt & agent specs -->
+          </div>
+
+          <!-- Studio Grid: 2 Columns (Subagents with Prompts & Tools, MCP Servers & Live Tools) -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+            
+            <!-- Column 1: Subagents Directory with Prompts & Bound Tools -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🤖</span> Linux Subagents & Prompts</h3>
+                <span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; font-size: 11px; padding: 2px 6px;">4 Subagents</span>
+              </div>
+              <div id="domain-subagents-list" style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Column 2: FastMCP Servers & Live Exposed Tools -->
+            <div style="display: flex; flex-direction: column; gap: 20px;">
+              <!-- MCP Servers -->
+              <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🔌</span> Registered FastMCP Servers</h3>
+                  <span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; font-size: 11px; padding: 2px 6px;">Live MCP</span>
+                </div>
+                <div id="mcp-servers-list" style="display: flex; flex-direction: column; gap: 10px;">
+                  <!-- Dynamically populated -->
+                </div>
+              </div>
+
+              <!-- Declarative SOP Skills -->
+              <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>📚</span> Declarative SOP Skills</h3>
+                  <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 11px; padding: 2px 6px;">Markdown SOPs</span>
+                </div>
+                <div id="domain-skills-list" style="display: flex; flex-direction: column; gap: 10px;">
+                  <!-- Dynamically populated -->
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- View 4: Settings View -->
+        <div id="settings-view" class="audit-view-container" style="display: none; padding: 24px; overflow-y: auto;">
+          <div class="audit-header" style="margin-bottom: 20px;">
+            <div>
+              <h2 style="font-size: 20px; color: #f8fafc;">⚙️ Global System & Governance Settings</h2>
+              <p style="font-size: 13px; color: #94a3b8; margin-top: 4px;">Configure human-in-the-loop authorization modes, SRE notifications, and database maintenance.</p>
+            </div>
+          </div>
+
+          <div style="max-width: 650px; display: flex; flex-direction: column; gap: 20px;">
+            <!-- Setting 1: HITL Governance Mode -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <h4 style="font-size: 15px; color: #f8fafc;">🛡️ Execution Governance Mode</h4>
+                  <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Switch between Human-In-The-Loop approval cards and 24/7 Autonomous execution.</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="settings-hitl-toggle" checked />
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div style="margin-top: 12px; font-size: 12px; font-weight: 600;" id="settings-mode-label">
+                🛡️ Guardrail Mode (HITL Enforced)
+              </div>
+            </div>
+
+            <!-- Setting 2: SRE Notification Recipient Email -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <h4 style="font-size: 15px; color: #f8fafc;">📧 SRE Report Notification Email</h4>
+              <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Configures the default recipient for enterprise patching summaries and incident reports.</p>
+              <div style="display: flex; gap: 10px; margin-top: 12px;">
+                <input type="email" id="settings-email-input" value="fayez.soufyani@gmail.com" placeholder="Recipient email..." style="background: #0f172a; border: 1px solid var(--border-color, #334155); color: #fff; font-size: 13px; padding: 8px 12px; border-radius: 6px; flex: 1; outline: none;" />
+                <button id="settings-save-email-btn" style="background: var(--accent-color, #3b82f6); border: none; color: #fff; font-size: 12px; font-weight: 600; padding: 8px 16px; border-radius: 6px; cursor: pointer;">Save Email</button>
+              </div>
+            </div>
+
+            <!-- Setting 3: Live SMTP Server Relay -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <h4 style="font-size: 15px; color: #f8fafc;">📨 SMTP Email Relay (Gmail / Enterprise Mail Server)</h4>
+              <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Configure your SMTP server to deliver real live emails to your inbox.</p>
+              
+              <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-top: 12px;">
+                <div>
+                  <label style="font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px;">SMTP Host</label>
+                  <input type="text" id="smtp-host-input" value="smtp.gmail.com" placeholder="smtp.gmail.com" style="width: 100%; background: #0f172a; border: 1px solid var(--border-color, #334155); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none;" />
+                </div>
+                <div>
+                  <label style="font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px;">Port</label>
+                  <input type="number" id="smtp-port-input" value="587" placeholder="587" style="width: 100%; background: #0f172a; border: 1px solid var(--border-color, #334155); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none;" />
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                <div>
+                  <label style="font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px;">SMTP Username / Sender</label>
+                  <input type="text" id="smtp-user-input" placeholder="e.g. your_email@gmail.com" style="width: 100%; background: #0f172a; border: 1px solid var(--border-color, #334155); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none;" />
+                </div>
+                <div>
+                  <label style="font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px;">App Password / Token</label>
+                  <input type="password" id="smtp-pass-input" placeholder="Google App Password (16 chars)" style="width: 100%; background: #0f172a; border: 1px solid var(--border-color, #334155); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none;" />
+                </div>
+              </div>
+
+              <div style="margin-top: 14px; display: flex; gap: 10px; align-items: center;">
+                <button id="save-smtp-btn" style="background: var(--accent-color, #3b82f6); border: none; color: #fff; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 6px; cursor: pointer;">Save SMTP Config</button>
+                <button id="test-smtp-btn" style="background: #334155; border: 1px solid #475569; color: #f8fafc; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 6px; cursor: pointer;">⚡ Send Test Email</button>
+                <span id="smtp-status-msg" style="font-size: 11px;"></span>
+              </div>
+            </div>
+
+            <!-- Setting 4: Database Cleanup & Maintenance -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <h4 style="font-size: 15px; color: #f8fafc;">🧹 Database Maintenance & Cleanup</h4>
+              <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Purge old session histories, cached threads, and completed test approvals from PostgreSQL.</p>
+              <div style="margin-top: 14px;">
+                <button id="settings-purge-db-btn" class="export-btn" style="border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; background: rgba(239, 68, 68, 0.1); padding: 8px 14px;">
+                  <span>🧹</span> Purge Stale Sessions & Test Records
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- Export Report Preview Modal -->
+    <div class="export-modal-overlay" id="export-modal">
+      <div class="export-modal-card">
+        <div class="export-modal-header">
+          <h3 style="font-size: 16px; color: #f8fafc;">📥 SRE Incident & Execution Post-Mortem Report</h3>
+          <button id="close-export-modal" style="background: none; border: none; color: #94a3b8; font-size: 18px; cursor: pointer;">✕</button>
+        </div>
+        <div class="export-modal-body">
+          <div class="export-preview" id="export-preview"></div>
+        </div>
+        <div class="export-modal-actions">
+          <button id="print-report-btn" class="tab-btn">🖨️ Print / Save as PDF</button>
+          <button id="download-md-btn" class="new-chat-btn">⬇️ Download Markdown (.md)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/app.js?v=4.0"></script>
+  </body>
+</html>

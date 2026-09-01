@@ -1,0 +1,68 @@
+---
+# Production Ansible Playbook: RHEL HA Cluster Rolling Update Orchestrator (SOP 2059253)
+# Executes node-by-node serial maintenance: Standby -> Patch -> Reboot -> Verify -> Unstandby
+- name: Red Hat HA Cluster Zero-Downtime Rolling Update
+  hosts: "{{ target_cluster | default('ha_cluster') }}"
+  serial: 1
+  gather_facts: true
+  tasks:
+    - name: 1. Verify Pre-Maintenance Cluster Health
+      ansible.builtin.command: pcs status
+      register: pre_check
+      changed_when: false
+      run_once: true
+
+    - name: 2. Evacuate Cluster Node (Standby)
+      ansible.builtin.command: pcs node standby {{ inventory_hostname }}
+      register: node_standby
+      changed_when: node_standby.rc == 0
+
+    - name: 3. Apply Package Updates via DNF
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+      register: dnf_result
+
+    - name: 4. Check if Kernel / System Reboot is Required
+      ansible.builtin.command: needs-restarting -r
+      register: reboot_check
+      changed_when: false
+      failed_when: false
+
+    - name: 5. Execute Managed Node Reboot if Required
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+        pre_reboot_delay: 2
+        post_reboot_delay: 15
+        test_command: uptime
+      when: dnf_result.changed or reboot_check.rc == 1
+
+    - name: 6. Verify Node Responds on SSH
+      ansible.builtin.wait_for:
+        port: 22
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        timeout: 120
+      delegate_to: localhost
+
+    - name: 7. Reintegrate Node into Cluster (Unstandby)
+      ansible.builtin.command: pcs node unstandby {{ inventory_hostname }}
+      register: node_unstandby
+      changed_when: node_unstandby.rc == 0
+
+    - name: 8. Reset Transient Resource Failcounts
+      ansible.builtin.command: pcs resource cleanup
+      changed_when: false
+      failed_when: false
+
+    - name: 9. Confirm Post-Maintenance Node and Resource Status
+      ansible.builtin.command: pcs status
+      register: post_pcs_status
+      changed_when: false
+      until: "'Online:' in post_pcs_status.stdout and inventory_hostname in post_pcs_status.stdout"
+      retries: 5
+      delay: 5
+
+    - name: Record Rolling Update Summary for Node
+      ansible.builtin.debug:
+        msg: "Rolling update completed successfully on node {{ inventory_hostname }}. Status: HEALTHY"
