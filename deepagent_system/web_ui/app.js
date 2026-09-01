@@ -779,6 +779,68 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // --- Change Password Handlers (Step 9) ---
+  const showChangePassBtn = document.getElementById("show-change-pass-btn");
+  const changePassFormCard = document.getElementById("change-pass-form-card");
+  const cancelChgPassBtn = document.getElementById("cancel-chg-pass-btn");
+  const submitChgPassBtn = document.getElementById("submit-chg-pass-btn");
+  const chgUserNameInput = document.getElementById("chg-user-name");
+  const chgOldPassInput = document.getElementById("chg-old-pass");
+  const chgNewPassInput = document.getElementById("chg-new-pass");
+  const chgPassStatus = document.getElementById("chg-pass-status");
+
+  if (showChangePassBtn && changePassFormCard) {
+    showChangePassBtn.addEventListener("click", () => {
+      changePassFormCard.style.display = changePassFormCard.style.display === "none" ? "block" : "none";
+    });
+  }
+
+  if (cancelChgPassBtn && changePassFormCard) {
+    cancelChgPassBtn.addEventListener("click", () => {
+      changePassFormCard.style.display = "none";
+    });
+  }
+
+  if (submitChgPassBtn) {
+    submitChgPassBtn.addEventListener("click", async () => {
+      const username = (chgUserNameInput.value || "").trim();
+      const old_password = (chgOldPassInput.value || "").trim();
+      const new_password = (chgNewPassInput.value || "").trim();
+
+      if (!username || !new_password) {
+        alert("Please specify username and new password.");
+        return;
+      }
+
+      const sessionToken = localStorage.getItem("deepagent_session_token");
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/auth/users/change_password`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": sessionToken ? `Bearer ${sessionToken}` : ""
+          },
+          body: JSON.stringify({
+            username: username,
+            old_password: old_password,
+            new_password: new_password
+          })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === "success") {
+          alert("✓ " + data.message);
+          changePassFormCard.style.display = "none";
+          chgOldPassInput.value = "";
+          chgNewPassInput.value = "";
+        } else {
+          alert("Password update failed: " + (data.detail || JSON.stringify(data)));
+        }
+      } catch (e) {
+        alert("Error changing password: " + e.message);
+      }
+    });
+  }
+
   async function loadUsersList() {
     const listEl = document.getElementById("users-list-grid");
     if (!listEl) return;
@@ -798,13 +860,26 @@ document.addEventListener("DOMContentLoaded", () => {
               ${escapeHtml(u.email || 'No email set')}
             </div>
           </div>
-          <span style="font-size: 11px; color: #10b981;">🟢 Active</span>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <span style="font-size: 11px; color: #10b981;">🟢 Active</span>
+            ${u.username !== 'admin' ? `<button onclick="deleteOperatorUser(${u.id})" style="background: none; border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; font-size: 10px; padding: 2px 6px; border-radius: 4px; cursor: pointer;">Delete</button>` : ''}
+          </div>
         </div>
       `).join("");
     } catch (e) {
       listEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load users: ${e.message}</div>`;
     }
   }
+
+  window.deleteOperatorUser = async function(userId) {
+    if (!confirm("Deactivate this operator user account?")) return;
+    try {
+      await fetch(`${BASE_URL}/v1/auth/users/${userId}`, { method: "DELETE" });
+      await loadUsersList();
+    } catch (e) {
+      alert("Failed to deactivate user: " + e.message);
+    }
+  };
 
   if (refreshStudioBtn) {
     refreshStudioBtn.addEventListener("click", loadStudioData);

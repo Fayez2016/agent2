@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
-    <link rel="stylesheet" href="/style.css?v=18.0" />
+    <link rel="stylesheet" href="/style.css?v=20.0" />
   </head>
   <body>
     <div class="app-container">
@@ -581,11 +581,38 @@
             <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <h4 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
-                  <span>👥</span> Operator Accounts & RBAC Roles
+                  <span>👥</span> Operator Accounts & RBAC Roles (PostgreSQL)
                 </h4>
-                <button id="show-add-user-btn" style="background: #0284c7; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add User</button>
+                <div style="display: flex; gap: 8px;">
+                  <button id="show-change-pass-btn" style="background: #eab308; border: none; color: #000; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">🔑 Change Password</button>
+                  <button id="show-add-user-btn" style="background: #0284c7; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add User</button>
+                </div>
               </div>
-              <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Manage human operators, SRE on-call accounts, and administrator permissions.</p>
+              <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Manage human operators, SRE on-call accounts, and administrator credentials persisted in PostgreSQL.</p>
+
+              <!-- Change Password Form (Collapsible) -->
+              <div id="change-pass-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(234, 179, 8, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <div style="font-size: 12px; font-weight: 600; color: #facc15; margin-bottom: 8px;">Update Operator Password</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Target Username</label>
+                    <input type="text" id="chg-user-name" value="admin" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Current Password</label>
+                    <input type="password" id="chg-old-pass" placeholder="••••••••" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">New Password</label>
+                    <input type="password" id="chg-new-pass" placeholder="••••••••" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+                  <button id="submit-chg-pass-btn" style="background: #eab308; border: none; color: #000; font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 4px; cursor: pointer;">Update Password</button>
+                  <button id="cancel-chg-pass-btn" style="background: #475569; border: none; color: #fff; font-size: 11px; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                  <span id="chg-pass-status" style="font-size: 11px;"></span>
+                </div>
+              </div>
 
               <!-- Add User Form (Collapsible) -->
               <div id="add-user-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(2, 132, 199, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
@@ -689,6 +716,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/app.js?v=19.0"></script>
+    <script src="/app.js?v=20.0"></script>
   </body>
 </html>

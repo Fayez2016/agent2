@@ -106,6 +106,30 @@ class AuthRepository:
             return cursor.fetchone()
 
     @classmethod
+    def change_password(cls, username: str, old_password: Optional[str], new_password: str, is_admin_override: bool = False) -> bool:
+        cls.init_auth_schema()
+        with DatabasePool.get_cursor(commit=True) as cursor:
+            cursor.execute("SELECT id, password_hash FROM users WHERE username = %s AND is_active = TRUE;", (username,))
+            user = cursor.fetchone()
+            if not user:
+                return False
+            
+            if not is_admin_override:
+                if not old_password or not cls.verify_password(old_password, user["password_hash"]):
+                    return False
+            
+            new_hash = cls.hash_password(new_password)
+            cursor.execute("UPDATE users SET password_hash = %s WHERE id = %s;", (new_hash, user["id"]))
+            return cursor.rowcount > 0
+
+    @classmethod
+    def delete_user(cls, user_id: int) -> bool:
+        cls.init_auth_schema()
+        with DatabasePool.get_cursor(commit=True) as cursor:
+            cursor.execute("UPDATE users SET is_active = FALSE WHERE id = %s;", (user_id,))
+            return cursor.rowcount > 0
+
+    @classmethod
     def generate_api_token(cls, name: str, scope: str = "read_write", domain_category: str = "all", expiry_days: Optional[int] = None, created_by: str = "admin") -> Dict[str, Any]:
         cls.init_auth_schema()
         raw_token = f"da_sec_{secrets.token_urlsafe(32)}"

@@ -18,6 +18,11 @@ class CreateUserRequest(BaseModel):
     role: str = "operator"
     email: str = ""
 
+class ChangePasswordRequest(BaseModel):
+    username: str
+    old_password: Optional[str] = None
+    new_password: str
+
 class GenerateTokenRequest(BaseModel):
     name: str
     scope: str = "read_write"
@@ -97,6 +102,35 @@ def create_user(req: CreateUserRequest):
         return {"status": "success", "user": user}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to create user: {str(e)}")
+
+@router.post("/users/change_password")
+def change_password(req: ChangePasswordRequest, authorization: Optional[str] = Header(None)):
+    """Changes password for an operator account."""
+    is_admin = False
+    if authorization:
+        token = authorization.replace("Bearer ", "").strip()
+        if token in _ACTIVE_SESSIONS and _ACTIVE_SESSIONS[token].get("role") == "admin":
+            is_admin = True
+        elif token == "hermes-api-secret":
+            is_admin = True
+
+    success = AuthRepository.change_password(
+        username=req.username,
+        old_password=req.old_password,
+        new_password=req.new_password,
+        is_admin_override=is_admin
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail="Password change failed: incorrect old password or user not found.")
+    return {"status": "success", "message": f"Password updated successfully for {req.username}."}
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int):
+    """Deactivates a user account."""
+    success = AuthRepository.delete_user(user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"status": "success", "message": f"User {user_id} deactivated"}
 
 @router.get("/tokens")
 def list_api_tokens():
