@@ -566,8 +566,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (mainCardEl) mainCardEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load agent: ${e.message}</div>`;
     }
   }
-    }
-  }
 
   async function loadStudioSkills() {
     const listEl = document.getElementById("domain-skills-list");
