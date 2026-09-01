@@ -162,6 +162,98 @@ document.addEventListener("DOMContentLoaded", () => {
       settingsView.style.display = "block";
       await fetchNotificationEmail();
       await fetchHitlMode();
+      await fetchSMTPSettings();
+    });
+  }
+
+  // --- Live SMTP Relay Handlers ---
+  const smtpHostInput = document.getElementById("smtp-host-input");
+  const smtpPortInput = document.getElementById("smtp-port-input");
+  const smtpUserInput = document.getElementById("smtp-user-input");
+  const smtpPassInput = document.getElementById("smtp-pass-input");
+  const saveSmtpBtn = document.getElementById("save-smtp-btn");
+  const testSmtpBtn = document.getElementById("test-smtp-btn");
+  const smtpStatusMsg = document.getElementById("smtp-status-msg");
+
+  async function fetchSMTPSettings() {
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/settings/smtp`);
+      const data = await resp.json();
+      if (smtpHostInput && data.smtp_host) smtpHostInput.value = data.smtp_host;
+      if (smtpPortInput && data.smtp_port) smtpPortInput.value = data.smtp_port;
+      if (smtpUserInput && data.smtp_user) smtpUserInput.value = data.smtp_user;
+    } catch (e) {
+      console.warn("Failed to fetch SMTP settings:", e);
+    }
+  }
+
+  if (saveSmtpBtn) {
+    saveSmtpBtn.addEventListener("click", async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/settings/smtp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            smtp_host: (smtpHostInput.value || "smtp.gmail.com").trim(),
+            smtp_port: parseInt(smtpPortInput.value || "587"),
+            smtp_user: (smtpUserInput.value || "").trim(),
+            smtp_pass: (smtpPassInput.value || "").trim(),
+            sender_email: (smtpUserInput.value || "").trim()
+          })
+        });
+        const data = await resp.json();
+        if (data.status === "success") {
+          saveSmtpBtn.textContent = "✓ Saved";
+          saveSmtpBtn.style.background = "#10b981";
+          setTimeout(() => {
+            saveSmtpBtn.textContent = "Save SMTP Config";
+            saveSmtpBtn.style.background = "var(--accent-color, #3b82f6)";
+          }, 2000);
+        } else {
+          alert("Failed to save SMTP: " + data.detail);
+        }
+      } catch (err) {
+        alert("Error saving SMTP settings: " + err.message);
+      }
+    });
+  }
+
+  if (testSmtpBtn) {
+    testSmtpBtn.addEventListener("click", async () => {
+      if (smtpStatusMsg) {
+        smtpStatusMsg.textContent = "⏳ Sending test email...";
+        smtpStatusMsg.style.color = "#fbbf24";
+      }
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/settings/smtp/test`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            smtp_host: (smtpHostInput.value || "smtp.gmail.com").trim(),
+            smtp_port: parseInt(smtpPortInput.value || "587"),
+            smtp_user: (smtpUserInput.value || "").trim(),
+            smtp_pass: (smtpPassInput.value || "").trim(),
+            sender_email: (smtpUserInput.value || "").trim()
+          })
+        });
+        const data = await resp.json();
+        if (data.status === "success") {
+          if (smtpStatusMsg) {
+            smtpStatusMsg.textContent = "✓ " + data.message;
+            smtpStatusMsg.style.color = "#10b981";
+          }
+        } else {
+          if (smtpStatusMsg) {
+            smtpStatusMsg.textContent = "✗ " + data.message;
+            smtpStatusMsg.style.color = "#ef4444";
+          }
+        }
+      } catch (err) {
+        if (smtpStatusMsg) {
+          smtpStatusMsg.textContent = "✗ " + err.message;
+          smtpStatusMsg.style.color = "#ef4444";
+        }
+      }
     });
   }
 

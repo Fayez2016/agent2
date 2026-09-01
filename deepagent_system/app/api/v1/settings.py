@@ -93,6 +93,73 @@ async def cleanup_database_endpoint(req: DBCleanupRequest):
                 h_count = HitlRepository.purge_all()
             stats["deleted_hitl_requests"] = h_count
 
-        return {"status": "success", "stats": stats}
+class SMTPSettingsRequest(BaseModel):
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_pass: str = ""
+    sender_email: str = "deepagent-sre@enterprise.local"
+
+@router.get("/smtp")
+async def get_smtp_settings():
+    """Returns configured SMTP relay configuration from PostgreSQL."""
+    try:
+        return {
+            "smtp_host": HitlRepository.get_setting("smtp_host", "smtp.gmail.com"),
+            "smtp_port": int(HitlRepository.get_setting("smtp_port", "587")),
+            "smtp_user": HitlRepository.get_setting("smtp_user", ""),
+            "sender_email": HitlRepository.get_setting("sender_email", "deepagent-sre@enterprise.local"),
+            "is_configured": bool(HitlRepository.get_setting("smtp_user", ""))
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database cleanup failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch SMTP settings: {e}")
+
+@router.post("/smtp")
+async def update_smtp_settings(req: SMTPSettingsRequest):
+    """Updates SMTP relay credentials in PostgreSQL."""
+    try:
+        HitlRepository.set_setting("smtp_host", req.smtp_host.strip())
+        HitlRepository.set_setting("smtp_port", str(req.smtp_port))
+        HitlRepository.set_setting("smtp_user", req.smtp_user.strip())
+        if req.smtp_pass:
+            HitlRepository.set_setting("smtp_pass", req.smtp_pass.strip())
+        HitlRepository.set_setting("sender_email", req.sender_email.strip())
+        return {"status": "success", "message": "SMTP settings saved successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save SMTP settings: {e}")
+
+@router.post("/smtp/test")
+async def test_smtp_connection(req: SMTPSettingsRequest):
+    """Tests sending an actual test email via configured SMTP relay."""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    
+    recipient = HitlRepository.get_setting("notification_email", "fayez.soufyani@gmail.com")
+    host = req.smtp_host.strip() or "smtp.gmail.com"
+    port = req.smtp_port or 587
+    user = req.smtp_user.strip()
+    pwd = req.smtp_pass.strip() or HitlRepository.get_setting("smtp_pass", "")
+    sender = req.sender_email.strip() or user or "deepagent-sre@enterprise.local"
+
+    msg = MIMEMultipart()
+    msg["From"] = sender
+    msg["To"] = recipient
+    msg["Subject"] = "🧪 [Test] Deep Agent SMTP Verification"
+    msg.attach(MIMEText(f"Hello,\n\nThis is a verification email from your Deep Agent system sent to {recipient}.\n\nTimestamp: {HitlRepository.get_setting('last_test', 'Now')}", "plain"))
+
+    try:
+        if port == 465:
+            server = smtplib.SMTP_SSL(host, port, timeout=10.0)
+        else:
+            server = smtplib.SMTP(host, port, timeout=10.0)
+            server.starttls()
+
+        if user and pwd:
+            server.login(user, pwd)
+
+        server.send_message(msg)
+        server.quit()
+        return {"status": "success", "message": f"Test email successfully dispatched to {recipient}!"}
+    except Exception as e:
+        return {"status": "error", "message": f"SMTP delivery failed: {str(e)}"}
