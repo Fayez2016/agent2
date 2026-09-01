@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
-    <link rel="stylesheet" href="/style.css?v=16.0" />
+    <link rel="stylesheet" href="/style.css?v=17.0" />
   </head>
   <body>
     <div class="app-container">
@@ -119,8 +119,6 @@
               <span id="hitl-badge-icon">🛡️</span>
               <span id="hitl-badge-text">HITL Enforced</span>
             </div>
-
-            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 4px 8px; border-radius: 4px; font-weight: 600;">NVIDIA RTX 3050 CUDA</span>
           </div>
         </header>
 
@@ -283,36 +281,36 @@
             <!-- Dynamically populated main prompt & agent specs -->
           </div>
 
-          <!-- Studio Grid: 2 Columns (Subagents with Prompts & Tools, MCP Servers & Live Tools) -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+          <!-- Studio Grid: Clean 3-Column Aligned Layout (Subagents | FastMCP Servers | Declarative SOP Skills) -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; align-items: start;">
             
             <!-- Column 1: Subagents Directory with Prompts & Bound Tools -->
-            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px; display: flex; flex-direction: column;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🤖</span> Domain Subagents & Prompts</h3>
+                <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🤖</span> Subagents</h3>
                 <button id="show-add-subagent-btn" style="background: #a855f7; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add Subagent</button>
               </div>
 
               <!-- Add Subagent Form (Collapsible) -->
               <div id="add-subagent-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
-                <h4 style="font-size: 13px; color: #c084fc; margin-bottom: 8px;">Attach New Subagent to Active Agent</h4>
+                <h4 style="font-size: 13px; color: #c084fc; margin-bottom: 8px;">Attach New Subagent</h4>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div>
-                    <label style="font-size: 11px; color: #94a3b8; display: block;">Subagent Name (Unique)</label>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Subagent Name</label>
                     <input type="text" id="new-subagent-name" placeholder="e.g. ad_sync_operator" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
                   </div>
                   <div>
-                    <label style="font-size: 11px; color: #94a3b8; display: block;">Tool Bindings (comma-separated)</label>
-                    <input type="text" id="new-subagent-tools" placeholder="e.g. ansible_run_command, ansible_send_email" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Tool Bindings</label>
+                    <input type="text" id="new-subagent-tools" placeholder="e.g. winrm_*, sop_*" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
                   </div>
                 </div>
                 <div style="margin-top: 8px;">
                   <label style="font-size: 11px; color: #94a3b8; display: block;">Description</label>
-                  <input type="text" id="new-subagent-desc" placeholder="Specialized operator for Active Directory synchronization" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
+                  <input type="text" id="new-subagent-desc" placeholder="Specialized subagent description..." style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
                 </div>
                 <div style="margin-top: 8px;">
                   <label style="font-size: 11px; color: #94a3b8; display: block;">Subagent System Prompt</label>
-                  <textarea id="new-subagent-prompt" rows="3" placeholder="You are the Active Directory sync subagent..." style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px; border-radius: 4px; outline: none; font-family: monospace;"></textarea>
+                  <textarea id="new-subagent-prompt" rows="3" placeholder="You are the subagent..." style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px; border-radius: 4px; outline: none; font-family: monospace;"></textarea>
                 </div>
                 <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
                   <button id="save-new-subagent-btn" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save Subagent</button>
@@ -326,92 +324,90 @@
               </div>
             </div>
 
-            <!-- Column 2: FastMCP Servers & Live Exposed Tools -->
-            <div style="display: flex; flex-direction: column; gap: 20px;">
-              <!-- MCP Servers -->
-              <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                  <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🔌</span> FastMCP Servers</h3>
-                  <button id="show-add-mcp-btn" style="background: var(--accent-color, #3b82f6); border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add MCP Server</button>
-                </div>
-                
-                <!-- Add MCP Server Form (Collapsible) -->
-                <div id="add-mcp-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
-                  <h4 style="font-size: 13px; color: #60a5fa; margin-bottom: 8px;">Connect New FastMCP Server</h4>
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                    <div>
-                      <label style="font-size: 11px; color: #94a3b8; display: block;">Server Name</label>
-                      <input type="text" id="new-mcp-name" placeholder="e.g. winrm_mcp" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
-                    </div>
-                    <div>
-                      <label style="font-size: 11px; color: #94a3b8; display: block;">Domain Scope</label>
-                      <select id="new-mcp-domain" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;">
-                        <option value="linux">linux</option>
-                        <option value="windows">windows</option>
-                        <option value="vmware">vmware</option>
-                        <option value="global">global</option>
-                      </select>
-                    </div>
+            <!-- Column 2: FastMCP Servers & Live Status -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px; display: flex; flex-direction: column;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🔌</span> FastMCP Servers</h3>
+                <button id="show-add-mcp-btn" style="background: var(--accent-color, #3b82f6); border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add MCP Server</button>
+              </div>
+              
+              <!-- Add MCP Server Form (Collapsible) -->
+              <div id="add-mcp-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <h4 style="font-size: 13px; color: #60a5fa; margin-bottom: 8px;">Connect New FastMCP Server</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Server Name</label>
+                    <input type="text" id="new-mcp-name" placeholder="e.g. winrm" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
                   </div>
-                  <div style="margin-top: 8px;">
-                    <label style="font-size: 11px; color: #94a3b8; display: block;">Endpoint URL</label>
-                    <input type="text" id="new-mcp-url" placeholder="http://deepagent-winrm:8002/mcp" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
-                  </div>
-                  <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
-                    <button id="save-new-mcp-btn" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save Server</button>
-                    <button id="cancel-add-mcp-btn" style="background: #475569; border: none; color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
-                    <span id="add-mcp-status" style="font-size: 11px;"></span>
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Domain Scope</label>
+                    <select id="new-mcp-domain" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;">
+                      <option value="linux">linux</option>
+                      <option value="windows">windows</option>
+                      <option value="vmware">vmware</option>
+                      <option value="database">database</option>
+                      <option value="k8s">k8s</option>
+                    </select>
                   </div>
                 </div>
-
-                <div id="mcp-servers-list" style="display: flex; flex-direction: column; gap: 10px;">
-                  <!-- Dynamically populated -->
+                <div style="margin-top: 8px;">
+                  <label style="font-size: 11px; color: #94a3b8; display: block;">Endpoint URL (Streamable HTTP)</label>
+                  <input type="text" id="new-mcp-url" placeholder="http://deepagent-winrm-mcp:8002/mcp" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+                  <button id="save-new-mcp-btn" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save Server</button>
+                  <button id="cancel-add-mcp-btn" style="background: #475569; border: none; color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                  <span id="add-mcp-status" style="font-size: 11px;"></span>
                 </div>
               </div>
 
-              <!-- Declarative SOP Skills -->
-              <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                  <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>📚</span> Declarative SOP Skills</h3>
-                  <button id="show-add-skill-btn" style="background: #0284c7; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add / Edit SOP</button>
-                </div>
+              <div id="mcp-servers-list" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
 
-                <!-- Add/Edit Skill Form (Collapsible) -->
-                <div id="add-skill-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(2, 132, 199, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
-                  <h4 style="font-size: 13px; color: #38bdf8; margin-bottom: 8px;">Create or Edit Markdown SOP Skill</h4>
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                    <div>
-                      <label style="font-size: 11px; color: #94a3b8; display: block;">Skill Key Name</label>
-                      <input type="text" id="new-skill-name" placeholder="e.g. windows-rolling-patching" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
-                    </div>
-                    <div>
-                      <label style="font-size: 11px; color: #94a3b8; display: block;">Domain Category</label>
-                      <select id="new-skill-domain" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;">
-                        <option value="linux">linux</option>
-                        <option value="windows">windows</option>
-                        <option value="vmware">vmware</option>
-                        <option value="general">general</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div style="margin-top: 8px;">
-                    <label style="font-size: 11px; color: #94a3b8; display: block;">Display Title & Description</label>
-                    <input type="text" id="new-skill-desc" placeholder="Windows Server 2022 Rolling Patching procedure" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
-                  </div>
-                  <div style="margin-top: 8px;">
-                    <label style="font-size: 11px; color: #94a3b8; display: block;">Markdown SOP Procedure</label>
-                    <textarea id="new-skill-markdown" rows="5" placeholder="# SOP Title\n\n## Objective\n..." style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px; border-radius: 4px; outline: none; font-family: monospace;"></textarea>
-                  </div>
-                  <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
-                    <button id="save-new-skill-btn" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save SOP Skill</button>
-                    <button id="cancel-add-skill-btn" style="background: #475569; border: none; color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
-                    <span id="add-skill-status" style="font-size: 11px;"></span>
-                  </div>
-                </div>
+            <!-- Column 3: Declarative SOP Skills -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px; display: flex; flex-direction: column;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>📚</span> SOP Skills</h3>
+                <button id="show-add-skill-btn" style="background: #0284c7; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add SOP</button>
+              </div>
 
-                <div id="domain-skills-list" style="display: flex; flex-direction: column; gap: 10px;">
-                  <!-- Dynamically populated -->
+              <!-- Add/Edit Skill Form (Collapsible) -->
+              <div id="add-skill-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(2, 132, 199, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <h4 style="font-size: 13px; color: #38bdf8; margin-bottom: 8px;">Create or Edit Markdown SOP</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Skill Key Name</label>
+                    <input type="text" id="new-skill-name" placeholder="e.g. windows-rolling-patching" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Domain Category</label>
+                    <select id="new-skill-domain" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;">
+                      <option value="linux">linux</option>
+                      <option value="windows">windows</option>
+                      <option value="vmware">vmware</option>
+                      <option value="general">general</option>
+                    </select>
+                  </div>
                 </div>
+                <div style="margin-top: 8px;">
+                  <label style="font-size: 11px; color: #94a3b8; display: block;">Display Title & Description</label>
+                  <input type="text" id="new-skill-desc" placeholder="Operational procedure description..." style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
+                </div>
+                <div style="margin-top: 8px;">
+                  <label style="font-size: 11px; color: #94a3b8; display: block;">Markdown SOP Procedure</label>
+                  <textarea id="new-skill-markdown" rows="5" placeholder="# SOP Title\n\n## Objective\n..." style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px; border-radius: 4px; outline: none; font-family: monospace;"></textarea>
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+                  <button id="save-new-skill-btn" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save SOP</button>
+                  <button id="cancel-add-skill-btn" style="background: #475569; border: none; color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                  <span id="add-skill-status" style="font-size: 11px;"></span>
+                </div>
+              </div>
+
+              <div id="domain-skills-list" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- Dynamically populated -->
               </div>
             </div>
 
@@ -549,6 +545,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/app.js?v=16.0"></script>
+    <script src="/app.js?v=17.0"></script>
   </body>
 </html>
