@@ -24,13 +24,22 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Views
   const chatView = document.getElementById("chat-view");
+  const eventsView = document.getElementById("events-view");
   const auditView = document.getElementById("audit-view");
   const studioView = document.getElementById("studio-view");
   const settingsView = document.getElementById("settings-view");
   const tabChat = document.getElementById("tab-chat");
+  const tabEvents = document.getElementById("tab-events");
   const tabAudit = document.getElementById("tab-audit");
   const tabStudio = document.getElementById("tab-studio");
   const tabSettings = document.getElementById("tab-settings");
+  const webhookCountBadge = document.getElementById("webhook-count-badge");
+  const eventsPendingStat = document.getElementById("events-pending-stat");
+  const eventsTotalStat = document.getElementById("events-total-stat");
+  const eventsTableBody = document.getElementById("events-table-body");
+  const refreshEventsBtn = document.getElementById("refresh-events-btn");
+  const simulateAlertStormBtn = document.getElementById("simulate-alert-storm-btn");
+  const triggerBatchProcessBtn = document.getElementById("trigger-batch-process-btn");
   const auditTableBody = document.getElementById("audit-table-body");
   const refreshAuditBtn = document.getElementById("refresh-audit-btn");
   const refreshStudioBtn = document.getElementById("refresh-studio-btn");
@@ -60,7 +69,9 @@ document.addEventListener("DOMContentLoaded", () => {
     await fetchNotificationEmail();
     await populateDomainSwitcher();
     await loadThreads();
+    await pollWebhookBufferCount();
     startPendingHitlPolling();
+    startWebhookPolling();
   }
 
   // --- SRE Report Recipient Email Settings ---
@@ -125,10 +136,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- View Switcher ---
   function hideAllViews() {
     tabChat.classList.remove("active");
+    if (tabEvents) tabEvents.classList.remove("active");
     tabAudit.classList.remove("active");
     if (tabStudio) tabStudio.classList.remove("active");
     if (tabSettings) tabSettings.classList.remove("active");
     chatView.style.display = "none";
+    if (eventsView) eventsView.style.display = "none";
     auditView.style.display = "none";
     if (studioView) studioView.style.display = "none";
     if (settingsView) settingsView.style.display = "none";
@@ -139,6 +152,15 @@ document.addEventListener("DOMContentLoaded", () => {
     tabChat.classList.add("active");
     chatView.style.display = "flex";
   });
+
+  if (tabEvents) {
+    tabEvents.addEventListener("click", async () => {
+      hideAllViews();
+      tabEvents.classList.add("active");
+      eventsView.style.display = "block";
+      await loadEventsFeed();
+    });
+  }
 
   tabAudit.addEventListener("click", async () => {
     hideAllViews();
@@ -164,6 +186,137 @@ document.addEventListener("DOMContentLoaded", () => {
       await fetchNotificationEmail();
       await fetchHitlMode();
       await fetchSMTPSettings();
+    });
+  }
+
+  // --- Inbound Webhook Alarms & Event Storm Feed ---
+  async function pollWebhookBufferCount() {
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/events/pending?domain=${activeDomainKey || 'linux'}`);
+      const data = await resp.json();
+      const count = data.pending_count || 0;
+      if (webhookCountBadge) {
+        if (count > 0) {
+          webhookCountBadge.textContent = count;
+          webhookCountBadge.style.display = "inline-block";
+        } else {
+          webhookCountBadge.style.display = "none";
+        }
+      }
+      if (eventsPendingStat) eventsPendingStat.textContent = `${count} Alarms`;
+    } catch (e) {
+      // quiet poll
+    }
+  }
+
+  function startWebhookPolling() {
+    setInterval(pollWebhookBufferCount, 3000);
+  }
+
+  async function loadEventsFeed() {
+    if (!eventsTableBody) return;
+    try {
+      const [pendResp, histResp] = await Promise.all([
+        fetch(`${BASE_URL}/v1/events/pending?domain=${activeDomainKey || 'linux'}`),
+        fetch(`${BASE_URL}/v1/events/history?limit=50`)
+      ]);
+      const pendData = await pendResp.json();
+      const histData = await histResp.json();
+      
+      const pendingCount = pendData.pending_count || 0;
+      const historyList = histData.events || [];
+
+      if (eventsPendingStat) eventsPendingStat.textContent = `${pendingCount} Alarms`;
+      if (eventsTotalStat) eventsTotalStat.textContent = `${historyList.length} Events`;
+
+      eventsTableBody.innerHTML = "";
+      if (historyList.length === 0) {
+        eventsTableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 20px;">No webhook events recorded yet. Click 'Simulate 20-Alarm Storm' to test alert ingestion.</td></tr>`;
+        return;
+      }
+
+      historyList.forEach((ev) => {
+        const tr = document.createElement("tr");
+        const isPending = ev.status === "PENDING";
+        const isCritical = ev.severity === "critical";
+        
+        tr.innerHTML = `
+          <td>#${ev.id}</td>
+          <td><strong style="color: #f8fafc; font-family: var(--font-mono);">${escapeHtml(ev.host_target)}</strong></td>
+          <td><code>${escapeHtml(ev.alert_type)}</code></td>
+          <td><span class="status-badge ${isCritical ? 'status-denied' : 'status-pending'}">${escapeHtml(ev.severity.toUpperCase())}</span></td>
+          <td><span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; font-size: 10px; padding: 2px 6px;">${escapeHtml(ev.domain)}</span></td>
+          <td style="font-size: 11px; color: #94a3b8;">${ev.received_at ? new Date(ev.received_at).toLocaleTimeString() : '-'}</td>
+          <td><span class="status-badge ${isPending ? 'status-pending' : 'status-granted'}">${escapeHtml(ev.status)}</span></td>
+          <td style="font-family: var(--font-mono); font-size: 11px; color: #94a3b8;">${escapeHtml(ev.batch_id || 'Buffering...')}</td>
+        `;
+        eventsTableBody.appendChild(tr);
+      });
+    } catch (e) {
+      eventsTableBody.innerHTML = `<tr><td colspan="8" style="color: #ef4444; padding: 12px;">Failed to load events: ${e.message}</td></tr>`;
+    }
+  }
+
+  if (refreshEventsBtn) refreshEventsBtn.addEventListener("click", loadEventsFeed);
+
+  if (simulateAlertStormBtn) {
+    simulateAlertStormBtn.addEventListener("click", async () => {
+      simulateAlertStormBtn.disabled = true;
+      simulateAlertStormBtn.textContent = "⏳ Simulating Storm...";
+      try {
+        const nodes = ["ha_cluster1_node1", "ha_cluster1_node2", "ha_cluster2_node1", "rhel-prod-01", "rhel-prod-02"];
+        const alertTypes = ["CorosyncLinkFlapping", "DiskPressure95Percent", "MemoryExhaustion", "PCSResourceFailCount"];
+        const fakeEvents = [];
+        for (let i = 0; i < 20; i++) {
+          fakeEvents.push({
+            host_target: nodes[i % nodes.length],
+            alert_type: alertTypes[i % alertTypes.length],
+            severity: i % 3 === 0 ? "critical" : "warning",
+            domain: activeDomainKey || "linux",
+            payload: { iteration: i + 1, source: "Dynatrace_Webhook_Simulator" }
+          });
+        }
+
+        const resp = await fetch(`${BASE_URL}/v1/events/bulk`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ events: fakeEvents, domain: activeDomainKey || "linux" })
+        });
+        const data = await resp.json();
+        alert(`✓ Webhook Ingestion Complete:\n- Ingested ${data.count} raw alarms into 5-minute rolling buffer.\n- Deduplicator subagent is buffering alarms.`);
+        await loadEventsFeed();
+        await pollWebhookBufferCount();
+      } catch (e) {
+        alert("Simulation error: " + e.message);
+      } finally {
+        simulateAlertStormBtn.disabled = false;
+        simulateAlertStormBtn.textContent = "⚡ Simulate 20-Alarm Storm";
+      }
+    });
+  }
+
+  if (triggerBatchProcessBtn) {
+    triggerBatchProcessBtn.addEventListener("click", async () => {
+      triggerBatchProcessBtn.disabled = true;
+      triggerBatchProcessBtn.textContent = "⏳ Deduplicating...";
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/events/process_batch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: activeDomainKey || "linux", trigger_remediation: true })
+        });
+        const data = await resp.json();
+        const m = data.manifest;
+        alert(`✓ 5-Minute Event Batch Deduplicated:\n- Total Raw Alarms Absorbed: ${m.total_raw_events}\n- Actionable Nodes: ${m.deduplicated_count}\n- Auto-Created Incident Session: ${data.thread_id || 'None'}`);
+        await loadEventsFeed();
+        await pollWebhookBufferCount();
+        await loadThreads();
+      } catch (e) {
+        alert("Batch processing error: " + e.message);
+      } finally {
+        triggerBatchProcessBtn.disabled = false;
+        triggerBatchProcessBtn.textContent = "🚀 Process & Deduplicate Batch Now";
+      }
     });
   }
 
@@ -1498,6 +1651,96 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {
       console.warn("Failed to load audit history:", e);
     }
+  }
+
+  // --- SRE Incident Post-Mortem Export & Report Generation ---
+  if (exportReportBtn) {
+    exportReportBtn.addEventListener("click", async () => {
+      if (!currentThreadId) {
+        alert("No active session selected to export.");
+        return;
+      }
+
+      try {
+        const [msgResp, hitlResp] = await Promise.all([
+          fetch(`${BASE_URL}/v1/threads/${currentThreadId}/messages`),
+          fetch(`${BASE_URL}/v1/hitl/history`)
+        ]);
+        const msgData = await msgResp.json();
+        const hitlData = await hitlResp.json();
+        const messages = msgData.messages || [];
+        const hitls = (hitlData.history || []).filter(h => h.thread_id === currentThreadId || !h.thread_id);
+
+        let reportMd = `# 🛡️ SRE Incident & Execution Post-Mortem Report\n\n`;
+        reportMd += `**Session ID:** \`${currentThreadId}\`  \n`;
+        reportMd += `**Generated At:** \`${new Date().toISOString()}\`  \n`;
+        reportMd += `**Active Domain:** \`${activeDomainKey || 'linux_sre'}\`  \n`;
+        reportMd += `**Governance Mode:** \`${currentMode.toUpperCase()}\`  \n\n`;
+        reportMd += `---\n\n`;
+
+        reportMd += `## 1. Executive Summary & Timeline\n\n`;
+        messages.forEach((m, idx) => {
+          const role = m.role === "user" ? "👤 Operator Command" : "🤖 Deep Agent Execution";
+          reportMd += `### ${idx + 1}. ${role}\n\n${m.content}\n\n`;
+          if (m.intermediate_steps && m.intermediate_steps.length > 0) {
+            reportMd += `#### Intermediate Tool Steps (${m.intermediate_steps.length} Steps):\n`;
+            m.intermediate_steps.forEach((step, sIdx) => {
+              reportMd += `- **Step ${sIdx + 1}**: \`${step.tool_name || step.step_type}\`\n`;
+              if (step.tool_args) reportMd += `  - Arguments: \`${JSON.stringify(step.tool_args)}\`\n`;
+              if (step.tool_output) reportMd += `  - Output: \`${String(step.tool_output).substring(0, 150)}...\`\n`;
+            });
+            reportMd += `\n`;
+          }
+        });
+
+        reportMd += `## 2. Human-In-The-Loop (HITL) Authorization Log\n\n`;
+        if (hitls.length === 0) {
+          reportMd += `*No high-risk destructive actions required manual operator intervention during this session.*\n\n`;
+        } else {
+          reportMd += `| Request ID | Action Name | Parameters | Decision | Requested At | Resolved At |\n`;
+          reportMd += `| :--- | :--- | :--- | :--- | :--- | :--- |\n`;
+          hitls.forEach((h) => {
+            reportMd += `| #${h.id} | **${h.action_name}** | \`${h.action_summary}\` | **${h.status}** | ${h.requested_at || '-'} | ${h.resolved_at || '-'} |\n`;
+          });
+          reportMd += `\n`;
+        }
+
+        reportMd += `---\n*Report digitally signed and exported from Deep Agent Autonomous SRE Platform.*\n`;
+
+        currentExportMarkdown = reportMd;
+        if (exportPreview) exportPreview.innerHTML = formatMarkdown(reportMd);
+        if (exportModal) exportModal.style.display = "flex";
+      } catch (err) {
+        alert("Failed to compile incident report: " + err.message);
+      }
+    });
+  }
+
+  if (closeExportModalBtn && exportModal) {
+    closeExportModalBtn.addEventListener("click", () => {
+      exportModal.style.display = "none";
+    });
+  }
+
+  if (downloadMdBtn) {
+    downloadMdBtn.addEventListener("click", () => {
+      if (!currentExportMarkdown) return;
+      const blob = new Blob([currentExportMarkdown], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `SRE_Incident_Report_${currentThreadId || 'export'}_${Date.now()}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  if (printReportBtn) {
+    printReportBtn.addEventListener("click", () => {
+      window.print();
+    });
   }
 
   function setLoadingState(isLoading) {

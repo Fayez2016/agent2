@@ -16,6 +16,10 @@ class BulkAlertEventRequest(BaseModel):
     events: List[AlertEventRequest]
     domain: str = "linux"
 
+class ProcessBatchRequest(BaseModel):
+    domain: str = "linux"
+    trigger_remediation: bool = False
+
 @router.post("/webhook")
 async def ingest_webhook_alert(req: AlertEventRequest):
     """Ingests a high-frequency monitoring webhook alarm into the buffer."""
@@ -50,14 +54,49 @@ async def get_pending_buffer(domain: str = "linux"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to query event buffer: {e}")
 
+@router.get("/history")
+async def get_event_history(limit: int = 50, domain: Optional[str] = None):
+    """Returns recent raw webhook events and their batch statuses for UI visibility."""
+    try:
+        events = EventRepository.get_event_history(limit=limit, domain=domain)
+        return {"total": len(events), "events": events}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to query event history: {e}")
+
 @router.post("/process_batch")
-async def trigger_event_batch_deduplication(domain: str = "linux"):
+async def trigger_event_batch_deduplication(req: Optional[ProcessBatchRequest] = None, domain: str = "linux"):
     """
     Executes the 5-Minute Event Deduplicator Subagent logic:
     Groups redundant alarms, suppresses storm flapping, and produces clean manifest.
     """
+    target_domain = req.domain if req else domain
     try:
-        manifest = EventRepository.process_and_deduplicate_batch(domain=domain)
-        return {"status": "success", "manifest": manifest}
+        manifest = EventRepository.process_and_deduplicate_batch(domain=target_domain)
+        
+        # If there are deduplicated targets, auto-create a tracking thread for the SRE operator
+        thread_id = None
+        if manifest.get("deduplicated_count", 0) > 0:
+            import uuid
+            from app.infrastructure.db.thread_repository import ThreadRepository
+            from datetime import datetime
+            
+            thread_id = f"thread_{uuid.uuid4().hex[:12]}"
+            targets_str = ", ".join([t["host_target"] for t in manifest.get("deduplicated_targets", [])])
+            title = f"⚡ [Webhook Storm Batch] {manifest['deduplicated_count']} Nodes ({datetime.now().strftime('%H:%M:%S')})"
+            ThreadRepository.create_thread(thread_id=thread_id, title=title)
+            
+            # Record the initial incident event in thread messages
+            summary_msg = f"**🚨 High-Frequency Alert Storm Deduplicated ({manifest['total_raw_events']} raw alarms -> {manifest['deduplicated_count']} actionable nodes)**\n\n"
+            for target in manifest.get("deduplicated_targets", []):
+                summary_msg += f"- **Host**: `{target['host_target']}` | Alarms Absorbed: `{target['raw_alerts_absorbed']}` | Severity: **{target['severity'].upper()}** | Types: `{', '.join(target['alert_types'])}`\n"
+            
+            ThreadRepository.add_message(
+                thread_id=thread_id,
+                role="assistant",
+                content=summary_msg
+            )
+            manifest["created_thread_id"] = thread_id
+
+        return {"status": "success", "manifest": manifest, "thread_id": thread_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process event batch: {e}")

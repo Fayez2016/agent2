@@ -146,3 +146,32 @@ class EventRepository:
                 "deduplicated_targets": deduped_targets,
                 "summary": f"Absorbed {raw_count} raw alarms into {len(deduped_targets)} distinct actionable targets."
             }
+
+    @staticmethod
+    def get_event_history(limit: int = 50, domain: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Returns recent raw webhook events with their batching and timestamp details."""
+        with DatabasePool.get_cursor() as cursor:
+            if domain:
+                cursor.execute(
+                    """
+                    SELECT id, domain, host_target, alert_type, severity, payload, received_at, status, batch_id, processed_at
+                    FROM collected_events
+                    WHERE domain = %s
+                    ORDER BY received_at DESC
+                    LIMIT %s;
+                    """,
+                    (domain, limit)
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT id, domain, host_target, alert_type, severity, payload, received_at, status, batch_id, processed_at
+                    FROM collected_events
+                    ORDER BY received_at DESC
+                    LIMIT %s;
+                    """,
+                    (limit,)
+                )
+            rows = cursor.fetchall()
+            return [dict(r) for r in rows]
+
