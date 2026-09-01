@@ -1,3 +1,4 @@
+from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.infrastructure.db.hitl_repository import HitlRepository
@@ -167,3 +168,146 @@ async def test_smtp_connection(req: SMTPSettingsRequest):
         return {"status": "success", "message": f"Test email successfully dispatched to {recipient}!"}
     except Exception as e:
         return {"status": "error", "message": f"SMTP delivery failed: {str(e)}"}
+
+# --- AAP (Ansible Automation Platform) Settings Endpoints ---
+class AAPSettingsRequest(BaseModel):
+    backend_mode: str = "mock"  # "mock" or "prd"
+    aap_host: str = "http://aap-server:5000"
+    aap_token: Optional[str] = None
+    verify_ssl: bool = False
+
+@router.get("/aap")
+async def get_aap_settings():
+    """Returns current AAP connection credentials and backend mode from PostgreSQL."""
+    try:
+        mode = HitlRepository.get_setting("ansible_backend_mode", "mock")
+        host = HitlRepository.get_setting("aap_host", "http://aap-server:5000")
+        token = HitlRepository.get_setting("aap_token", "")
+        verify_ssl = HitlRepository.get_setting("aap_verify_ssl", "false").lower() == "true"
+        
+        # Mask token for security
+        masked_token = f"{token[:4]}••••{token[-4:]}" if len(token) > 8 else ("••••••••" if token else "")
+        return {
+            "backend_mode": mode,
+            "aap_host": host,
+            "aap_token_masked": masked_token,
+            "is_token_set": bool(token),
+            "verify_ssl": verify_ssl
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch AAP settings: {e}")
+
+@router.post("/aap")
+async def update_aap_settings(req: AAPSettingsRequest):
+    """Updates AAP connection credentials in PostgreSQL."""
+    try:
+        HitlRepository.set_setting("ansible_backend_mode", req.backend_mode.strip().lower())
+        HitlRepository.set_setting("aap_host", req.aap_host.strip())
+        if req.aap_token is not None and req.aap_token.strip():
+            HitlRepository.set_setting("aap_token", req.aap_token.strip())
+        HitlRepository.set_setting("aap_verify_ssl", str(req.verify_ssl).lower())
+        return {"status": "success", "message": "AAP connection credentials saved successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save AAP settings: {e}")
+
+@router.post("/aap/test")
+async def test_aap_connection(req: AAPSettingsRequest):
+    """Tests live connection and token authentication against configured AAP instance."""
+    import requests
+    host = req.aap_host.strip() or HitlRepository.get_setting("aap_host", "http://aap-server:5000")
+    token = req.aap_token.strip() if req.aap_token else HitlRepository.get_setting("aap_token", "mock-token-123")
+    
+    # Ensure protocol
+    if not host.startswith("http://") and not host.startswith("https://"):
+        protocol = "http" if "localhost" in host or "5000" in host else "https"
+        url = f"{protocol}://{host}/api/v2/job_templates"
+    else:
+        url = f"{host.rstrip('/')}/api/v2/job_templates"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=8.0, verify=req.verify_ssl)
+        if resp.status_code == 200:
+            count = len(resp.json().get("results", []))
+            return {
+                "status": "success",
+                "message": f"✓ Successfully connected to AAP! Found {count} registered Job Templates."
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"AAP returned HTTP {resp.status_code}: {resp.text[:200]}"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Connection to AAP host failed: {str(e)}"
+        }
+
+# --- Global LLM Provider & OpenAI-Compliant Gateways ---
+class LLMProviderSettingsRequest(BaseModel):
+    default_provider: str = "openrouter"  # "openrouter", "groq", "ollama", "custom_openai"
+    openrouter_api_key: Optional[str] = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "qwen/qwen-2.5-72b-instruct"
+    groq_api_key: Optional[str] = None
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_model: str = "qwen/qwen3.6-27b"
+    ollama_host: str = "http://ollama:11434"
+    ollama_model: str = "qwen2.5:3b"
+    custom_openai_base_url: str = "https://api.openai.com/v1"
+    custom_openai_api_key: Optional[str] = None
+    custom_openai_model: str = "gpt-4o"
+
+@router.get("/llm_providers")
+async def get_llm_provider_settings():
+    """Returns configured OpenAI-compatible LLM gateways from PostgreSQL."""
+    try:
+        from app.config import settings
+        return {
+            "default_provider": HitlRepository.get_setting("llm_default_provider", settings.llm_provider),
+            "openrouter_base_url": HitlRepository.get_setting("openrouter_base_url", settings.openrouter_base_url),
+            "openrouter_model": HitlRepository.get_setting("openrouter_model", settings.openrouter_model),
+            "is_openrouter_set": bool(HitlRepository.get_setting("openrouter_api_key", settings.openrouter_api_key)),
+            "groq_base_url": HitlRepository.get_setting("groq_base_url", settings.groq_base_url),
+            "groq_model": HitlRepository.get_setting("groq_model", settings.groq_model),
+            "is_groq_set": bool(HitlRepository.get_setting("groq_api_key", settings.groq_api_key)),
+            "ollama_host": HitlRepository.get_setting("ollama_host", settings.ollama_host),
+            "ollama_model": HitlRepository.get_setting("ollama_model", settings.ollama_model),
+            "custom_openai_base_url": HitlRepository.get_setting("custom_openai_base_url", "https://api.openai.com/v1"),
+            "custom_openai_model": HitlRepository.get_setting("custom_openai_model", "gpt-4o"),
+            "is_custom_openai_set": bool(HitlRepository.get_setting("custom_openai_api_key", ""))
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch LLM settings: {e}")
+
+@router.post("/llm_providers")
+async def update_llm_provider_settings(req: LLMProviderSettingsRequest):
+    """Saves global LLM gateway credentials and endpoints in PostgreSQL."""
+    try:
+        HitlRepository.set_setting("llm_default_provider", req.default_provider.strip().lower())
+        HitlRepository.set_setting("openrouter_base_url", req.openrouter_base_url.strip())
+        HitlRepository.set_setting("openrouter_model", req.openrouter_model.strip())
+        if req.openrouter_api_key is not None and req.openrouter_api_key.strip():
+            HitlRepository.set_setting("openrouter_api_key", req.openrouter_api_key.strip())
+
+        HitlRepository.set_setting("groq_base_url", req.groq_base_url.strip())
+        HitlRepository.set_setting("groq_model", req.groq_model.strip())
+        if req.groq_api_key is not None and req.groq_api_key.strip():
+            HitlRepository.set_setting("groq_api_key", req.groq_api_key.strip())
+
+        HitlRepository.set_setting("ollama_host", req.ollama_host.strip())
+        HitlRepository.set_setting("ollama_model", req.ollama_model.strip())
+
+        HitlRepository.set_setting("custom_openai_base_url", req.custom_openai_base_url.strip())
+        HitlRepository.set_setting("custom_openai_model", req.custom_openai_model.strip())
+        if req.custom_openai_api_key is not None and req.custom_openai_api_key.strip():
+            HitlRepository.set_setting("custom_openai_api_key", req.custom_openai_api_key.strip())
+
+        return {"status": "success", "message": "LLM Provider configurations saved successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save LLM settings: {e}")

@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
-    <link rel="stylesheet" href="/style.css?v=23.0" />
+    <link rel="stylesheet" href="/style.css?v=24.0" />
   </head>
   <body>
     <div class="app-container">
@@ -244,6 +244,23 @@
                 </select>
               </div>
             </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-top: 10px;">
+              <div>
+                <label style="font-size: 11px; color: #94a3b8; display: block;">LLM Provider</label>
+                <select id="new-agent-provider" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 4px; outline: none;">
+                  <option value="openrouter">OpenRouter (Claude / Qwen / DeepSeek)</option>
+                  <option value="groq">Groq Cloud (Ultra-Fast Llama 3.3)</option>
+                  <option value="custom_openai">Custom OpenAI-Compliant Gateway / vLLM</option>
+                  <option value="ollama">Local Ollama</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size: 11px; color: #94a3b8; display: block;">Model Identifier / Tag</label>
+                <input type="text" id="new-agent-model" value="qwen/qwen-2.5-72b-instruct" placeholder="e.g. qwen/qwen-2.5-72b-instruct, gpt-4o, deepseek-r1" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 4px; outline: none;" />
+              </div>
+            </div>
+
             <div style="margin-top: 10px;">
               <label style="font-size: 11px; color: #94a3b8; display: block;">System Prompt</label>
               <textarea id="new-agent-prompt" rows="3" placeholder="You are the Enterprise Windows Systems Administrator Deep Agent..." style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 8px; border-radius: 4px; outline: none; font-family: monospace;"></textarea>
@@ -446,7 +463,106 @@
               </div>
             </div>
 
-            <!-- Setting 2: SRE Notification Recipient Email -->
+            <!-- Setting 2: Ansible Automation Platform (AAP) Live Credentials & Mode -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                  <span>🔌</span> Ansible Automation Platform (AAP) Connection & Credentials
+                </h4>
+                <span id="aap-badge-mode" class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; font-size: 11px; padding: 2px 6px;">Mock Simulator</span>
+              </div>
+              <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Configure Red Hat AAP / AWX cluster endpoints, OAuth2 bearer token, and toggle between Mock SRE simulation and Production.</p>
+
+              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-bottom: 10px;">
+                <div>
+                  <label style="font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px;">Backend Execution Mode</label>
+                  <select id="aap-backend-mode" style="width: 100%; background: #0f172a; border: 1px solid var(--border-color, #334155); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none;">
+                    <option value="mock">Mock Simulator (:5000)</option>
+                    <option value="prd">Production AAP Cluster</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px;">AAP Host URL</label>
+                  <input type="text" id="aap-host-input" value="http://aap-server:5000" placeholder="https://aap.enterprise.local" style="width: 100%; background: #0f172a; border: 1px solid var(--border-color, #334155); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none;" />
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 12px;">
+                <div>
+                  <label style="font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px;">OAuth2 Bearer Token / App Secret</label>
+                  <input type="password" id="aap-token-input" placeholder="Enter AAP Token (leave blank to keep current)" style="width: 100%; background: #0f172a; border: 1px solid var(--border-color, #334155); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none;" />
+                </div>
+                <div>
+                  <label style="font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px;">SSL Verification</label>
+                  <select id="aap-ssl-verify" style="width: 100%; background: #0f172a; border: 1px solid var(--border-color, #334155); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none;">
+                    <option value="false">Disabled (Self-Signed)</option>
+                    <option value="true">Strict (CA Validated)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="save-aap-btn" style="background: var(--accent-color, #3b82f6); border: none; color: #fff; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 6px; cursor: pointer;">Save AAP Credentials</button>
+                <button id="test-aap-btn" style="background: #334155; border: 1px solid #475569; color: #f8fafc; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 6px; cursor: pointer;">⚡ Test AAP Connection</button>
+                <span id="aap-status-msg" style="font-size: 11px;"></span>
+              </div>
+            </div>
+
+            <!-- Setting 3: Global OpenAI-Compliant LLM Gateways & API Keys -->
+            <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                  <span>🧠</span> Global OpenAI-Compliant LLM Gateways
+                </h4>
+                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 11px; padding: 2px 6px;">Multi-Provider</span>
+              </div>
+              <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Configure API credentials and endpoints for OpenRouter, Groq, local Ollama/vLLM, or custom internal OpenAI-compliant gateways.</p>
+
+              <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
+                <!-- OpenRouter -->
+                <div style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <strong style="font-size: 12px; color: #60a5fa;">🌐 OpenRouter Gateway (Claude, Qwen 72B, DeepSeek)</strong>
+                    <span id="openrouter-status-badge" style="font-size: 10px; color: #10b981;">🟢 Key Configured</span>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <input type="password" id="openrouter-key-input" placeholder="OpenRouter API Key (sk-or-...)" style="background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none;" />
+                    <input type="text" id="openrouter-model-input" value="qwen/qwen-2.5-72b-instruct" placeholder="Default Model Tag" style="background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                </div>
+
+                <!-- Groq -->
+                <div style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <strong style="font-size: 12px; color: #f59e0b;">⚡ Groq Cloud Gateway (Ultra-Fast Llama 3.3 / Qwen)</strong>
+                    <span id="groq-status-badge" style="font-size: 10px; color: #10b981;">🟢 Key Configured</span>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <input type="password" id="groq-key-input" placeholder="Groq API Key (gsk_...)" style="background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none;" />
+                    <input type="text" id="groq-model-input" value="qwen/qwen3.6-27b" placeholder="Default Model Tag" style="background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                </div>
+
+                <!-- Custom OpenAI-Compliant Gateway -->
+                <div style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <strong style="font-size: 12px; color: #a855f7;">🤖 Custom OpenAI-Compliant Gateway (vLLM / Azure / Enterprise)</strong>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-bottom: 6px;">
+                    <input type="text" id="custom-openai-url-input" placeholder="https://llm.enterprise.local/v1" style="background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none;" />
+                    <input type="text" id="custom-openai-model-input" value="gpt-4o" placeholder="Model identifier" style="background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                  <input type="password" id="custom-openai-key-input" placeholder="Bearer API Key / App Secret (optional for local)" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none;" />
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="save-llm-btn" style="background: var(--accent-color, #3b82f6); border: none; color: #fff; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 6px; cursor: pointer;">Save LLM Gateways</button>
+                <span id="llm-status-msg" style="font-size: 11px;"></span>
+              </div>
+            </div>
+
+            <!-- Setting 4: SRE Notification Recipient Email -->
             <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
               <h4 style="font-size: 15px; color: #f8fafc;">📧 SRE Report Notification Email</h4>
               <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Configures the default recipient for enterprise patching summaries and incident reports.</p>
@@ -456,7 +572,7 @@
               </div>
             </div>
 
-            <!-- Setting 3: Live SMTP Server Relay -->
+            <!-- Setting 5: Live SMTP Server Relay -->
             <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
               <h4 style="font-size: 15px; color: #f8fafc;">📨 SMTP Email Relay (Gmail / Enterprise Mail Server)</h4>
               <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Configure your SMTP server to deliver real live emails to your inbox.</p>
@@ -689,6 +805,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/app.js?v=23.0"></script>
+    <script src="/app.js?v=24.0"></script>
   </body>
 </html>

@@ -227,11 +227,29 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any], is_hig
             consume_approval(req_id)
             logger.info(f"Enforced HITL: Consumed approved request #{req_id} for '{template_name}'. Proceeding with execution.")
 
-    aap_host = os.getenv("AAP_HOST")
-    aap_token = os.getenv("AAP_TOKEN")
+    # Dynamically resolve AAP Host & Token from PostgreSQL system_settings (with ENV fallback)
+    aap_host = None
+    aap_token = None
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT key, value FROM system_settings WHERE key IN ('aap_host', 'aap_token', 'ansible_backend_mode');")
+        rows = dict(cur.fetchall())
+        aap_host = rows.get("aap_host")
+        aap_token = rows.get("aap_token")
+    except Exception as e:
+        logger.warning(f"Could not read AAP credentials from system_settings: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+    if not aap_host:
+        aap_host = os.getenv("AAP_HOST")
+    if not aap_token:
+        aap_token = os.getenv("AAP_TOKEN")
 
     if not aap_host or not aap_token:
-        return json.dumps({"error": "AAP_HOST or AAP_TOKEN not configured"})
+        return json.dumps({"error": "AAP_HOST or AAP_TOKEN not configured in PostgreSQL system_settings or Environment."})
 
     headers = {
         "Authorization": f"Bearer {aap_token}",

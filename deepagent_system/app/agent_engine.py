@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from deepagents import create_deep_agent
 from langchain_openai import ChatOpenAI
 from app.config import settings
@@ -18,39 +18,67 @@ _GLOBAL_AGENT = None
 
 _COMPILED_AGENTS: Dict[str, Any] = {}
 
-def get_llm_instance():
-    """Initializes LLM instance based on configuration."""
-    if settings.llm_provider == "openrouter":
+def get_llm_instance(provider: Optional[str] = None, model_name: Optional[str] = None, temperature: float = 0.1):
+    """
+    Initializes an OpenAI-compliant LLM instance dynamically from PostgreSQL system_settings
+    or agent-specific model parameters.
+    """
+    from app.infrastructure.db.hitl_repository import HitlRepository
+    
+    # 1. Resolve Provider
+    eff_provider = provider or HitlRepository.get_setting("llm_default_provider", settings.llm_provider).lower()
+    
+    if eff_provider == "openrouter":
+        api_key = HitlRepository.get_setting("openrouter_api_key", settings.openrouter_api_key)
+        base_url = HitlRepository.get_setting("openrouter_base_url", settings.openrouter_base_url)
+        eff_model = model_name or HitlRepository.get_setting("openrouter_model", settings.openrouter_model)
         return ChatOpenAI(
-            base_url=settings.openrouter_base_url,
-            api_key=settings.openrouter_api_key,
-            model=settings.openrouter_model,
-            temperature=0.1,
+            base_url=base_url,
+            api_key=api_key,
+            model=eff_model,
+            temperature=temperature,
             max_retries=5,
             timeout=60,
         )
-    elif settings.llm_provider == "groq":
+    elif eff_provider == "groq":
+        api_key = HitlRepository.get_setting("groq_api_key", settings.groq_api_key)
+        base_url = HitlRepository.get_setting("groq_base_url", settings.groq_base_url)
+        eff_model = model_name or HitlRepository.get_setting("groq_model", settings.groq_model)
         return ChatOpenAI(
-            base_url=settings.groq_base_url,
-            api_key=settings.groq_api_key,
-            model=settings.groq_model,
-            temperature=0.1,
+            base_url=base_url,
+            api_key=api_key,
+            model=eff_model,
+            temperature=temperature,
             max_retries=5,
             timeout=60,
         )
-    else:
-        ollama_v1_url = f"{settings.ollama_host}/v1" if not str(settings.ollama_host).endswith("/v1") else str(settings.ollama_host)
+    elif eff_provider in ("custom_openai", "openai"):
+        api_key = HitlRepository.get_setting("custom_openai_api_key", "sk-custom-secret")
+        base_url = HitlRepository.get_setting("custom_openai_base_url", "https://api.openai.com/v1")
+        eff_model = model_name or HitlRepository.get_setting("custom_openai_model", "gpt-4o")
+        return ChatOpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            model=eff_model,
+            temperature=temperature,
+            max_retries=5,
+            timeout=60,
+        )
+    else:  # ollama / local
+        host = HitlRepository.get_setting("ollama_host", settings.ollama_host)
+        ollama_v1_url = f"{host}/v1" if not str(host).endswith("/v1") else str(host)
+        eff_model = model_name or HitlRepository.get_setting("ollama_model", settings.ollama_model)
         return ChatOpenAI(
             base_url=ollama_v1_url,
             api_key="ollama",
-            model=settings.ollama_model,
+            model=eff_model,
             temperature=settings.ollama_temperature,
         )
 
 async def get_agent(domain_key: str = "linux_sre", reload: bool = False):
     """
     Dynamically loads or compiles ANY Domain Agent from PostgreSQL on demand.
-    Zero-code multi-domain agent instantiation.
+    Zero-code multi-domain agent instantiation with per-agent model settings.
     """
     global _COMPILED_AGENTS
     if not reload and domain_key in _COMPILED_AGENTS:
@@ -59,7 +87,13 @@ async def get_agent(domain_key: str = "linux_sre", reload: bool = False):
     from app.infrastructure.db.hitl_repository import HitlRepository
     from app.infrastructure.db.agent_repository import AgentRepository
 
-    llm = get_llm_instance()
+    # 1. Fetch Agent Record from DB
+    db_agent = AgentRepository.get_agent_by_key(domain_key)
+    domain_scope = db_agent.get("domain_category", "linux") if db_agent else "linux"
+    model_provider = db_agent.get("model_provider") if db_agent else None
+    model_name = db_agent.get("model_name") if db_agent else None
+
+    llm = get_llm_instance(provider=model_provider, model_name=model_name)
     notification_email = HitlRepository.get_setting("notification_email", "fayez.soufyani@gmail.com")
 
     # 1. Fetch Agent Record from DB

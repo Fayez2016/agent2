@@ -181,6 +181,9 @@ document.addEventListener("DOMContentLoaded", () => {
   async function initApp() {
     await fetchHitlMode();
     await fetchNotificationEmail();
+    await fetchAAPSettings();
+    await fetchLLMSettings();
+    await fetchSMTPSettings();
     await populateDomainSwitcher();
     await loadThreads();
     await pollWebhookBufferCount();
@@ -517,6 +520,158 @@ document.addEventListener("DOMContentLoaded", () => {
       } finally {
         triggerBatchProcessBtn.disabled = false;
         triggerBatchProcessBtn.textContent = "🚀 Process & Deduplicate Batch Now";
+      }
+    });
+  }
+
+  // --- AAP Connection & Token Handlers ---
+  const aapBackendModeSelect = document.getElementById("aap-backend-mode");
+  const aapHostInput = document.getElementById("aap-host-input");
+  const aapTokenInput = document.getElementById("aap-token-input");
+  const aapSslVerifySelect = document.getElementById("aap-ssl-verify");
+  const saveAapBtn = document.getElementById("save-aap-btn");
+  const testAapBtn = document.getElementById("test-aap-btn");
+  const aapStatusMsg = document.getElementById("aap-status-msg");
+  const aapBadgeMode = document.getElementById("aap-badge-mode");
+
+  async function fetchAAPSettings() {
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/settings/aap`);
+      const data = await resp.json();
+      if (aapBackendModeSelect && data.backend_mode) aapBackendModeSelect.value = data.backend_mode;
+      if (aapHostInput && data.aap_host) aapHostInput.value = data.aap_host;
+      if (aapSslVerifySelect) aapSslVerifySelect.value = data.verify_ssl ? "true" : "false";
+      if (aapBadgeMode) {
+        aapBadgeMode.textContent = data.backend_mode === "prd" ? "Production AAP" : "Mock Simulator";
+        aapBadgeMode.style.color = data.backend_mode === "prd" ? "#10b981" : "#60a5fa";
+      }
+    } catch (e) {
+      console.warn("Failed to fetch AAP settings:", e);
+    }
+  }
+
+  if (saveAapBtn) {
+    saveAapBtn.addEventListener("click", async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/settings/aap`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            backend_mode: aapBackendModeSelect ? aapBackendModeSelect.value : "mock",
+            aap_host: (aapHostInput.value || "").trim(),
+            aap_token: (aapTokenInput.value || "").trim() || null,
+            verify_ssl: aapSslVerifySelect ? aapSslVerifySelect.value === "true" : false
+          })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === "success") {
+          saveAapBtn.textContent = "✓ Saved";
+          saveAapBtn.style.background = "#10b981";
+          setTimeout(() => {
+            saveAapBtn.textContent = "Save AAP Credentials";
+            saveAapBtn.style.background = "var(--accent-color, #3b82f6)";
+          }, 2000);
+          await fetchAAPSettings();
+        } else {
+          alert("Failed to save AAP settings: " + data.detail);
+        }
+      } catch (err) {
+        alert("Error saving AAP settings: " + err.message);
+      }
+    });
+  }
+
+  if (testAapBtn) {
+    testAapBtn.addEventListener("click", async () => {
+      if (aapStatusMsg) {
+        aapStatusMsg.textContent = "⏳ Probing AAP endpoint...";
+        aapStatusMsg.style.color = "#fbbf24";
+      }
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/settings/aap/test`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            backend_mode: aapBackendModeSelect ? aapBackendModeSelect.value : "mock",
+            aap_host: (aapHostInput.value || "").trim(),
+            aap_token: (aapTokenInput.value || "").trim() || null,
+            verify_ssl: aapSslVerifySelect ? aapSslVerifySelect.value === "true" : false
+          })
+        });
+        const data = await resp.json();
+        if (data.status === "success") {
+          if (aapStatusMsg) {
+            aapStatusMsg.textContent = data.message;
+            aapStatusMsg.style.color = "#10b981";
+          }
+        } else {
+          if (aapStatusMsg) {
+            aapStatusMsg.textContent = "✗ " + data.message;
+            aapStatusMsg.style.color = "#ef4444";
+          }
+        }
+      } catch (err) {
+        if (aapStatusMsg) {
+          aapStatusMsg.textContent = "✗ Connection Error: " + err.message;
+          aapStatusMsg.style.color = "#ef4444";
+        }
+      }
+    });
+  }
+
+  // --- Global LLM Gateways Handlers ---
+  const openrouterKeyInput = document.getElementById("openrouter-key-input");
+  const openrouterModelInput = document.getElementById("openrouter-model-input");
+  const groqKeyInput = document.getElementById("groq-key-input");
+  const groqModelInput = document.getElementById("groq-model-input");
+  const customOpenaiUrlInput = document.getElementById("custom-openai-url-input");
+  const customOpenaiModelInput = document.getElementById("custom-openai-model-input");
+  const customOpenaiKeyInput = document.getElementById("custom-openai-key-input");
+  const saveLlmBtn = document.getElementById("save-llm-btn");
+  const llmStatusMsg = document.getElementById("llm-status-msg");
+
+  async function fetchLLMSettings() {
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/settings/llm_providers`);
+      const data = await resp.json();
+      if (openrouterModelInput && data.openrouter_model) openrouterModelInput.value = data.openrouter_model;
+      if (groqModelInput && data.groq_model) groqModelInput.value = data.groq_model;
+      if (customOpenaiUrlInput && data.custom_openai_base_url) customOpenaiUrlInput.value = data.custom_openai_base_url;
+      if (customOpenaiModelInput && data.custom_openai_model) customOpenaiModelInput.value = data.custom_openai_model;
+    } catch (e) {
+      console.warn("Failed to fetch LLM settings:", e);
+    }
+  }
+
+  if (saveLlmBtn) {
+    saveLlmBtn.addEventListener("click", async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/settings/llm_providers`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            openrouter_api_key: (openrouterKeyInput.value || "").trim() || null,
+            openrouter_model: (openrouterModelInput.value || "qwen/qwen-2.5-72b-instruct").trim(),
+            groq_api_key: (groqKeyInput.value || "").trim() || null,
+            groq_model: (groqModelInput.value || "qwen/qwen3.6-27b").trim(),
+            custom_openai_base_url: (customOpenaiUrlInput.value || "https://api.openai.com/v1").trim(),
+            custom_openai_api_key: (customOpenaiKeyInput.value || "").trim() || null,
+            custom_openai_model: (customOpenaiModelInput.value || "gpt-4o").trim()
+          })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === "success") {
+          saveLlmBtn.textContent = "✓ Gateways Saved";
+          saveLlmBtn.style.background = "#10b981";
+          setTimeout(() => {
+            saveLlmBtn.textContent = "Save LLM Gateways";
+            saveLlmBtn.style.background = "var(--accent-color, #3b82f6)";
+          }, 2000);
+        } else {
+          alert("Failed to save LLM Gateways: " + data.detail);
+        }
+      } catch (err) {
+        alert("Error saving LLM Gateways: " + err.message);
       }
     });
   }
@@ -1070,11 +1225,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const newAgentProviderSelect = document.getElementById("new-agent-provider");
+  const newAgentModelInput = document.getElementById("new-agent-model");
+
   if (saveNewAgentBtn) {
     saveNewAgentBtn.addEventListener("click", async () => {
       const key = (newAgentKeyInput.value || "").trim().toLowerCase();
       const name = (newAgentNameInput.value || "").trim();
       const domain = newAgentDomainSelect.value || "linux";
+      const provider = newAgentProviderSelect ? newAgentProviderSelect.value : "openrouter";
+      const model = newAgentModelInput ? (newAgentModelInput.value || "").trim() : "qwen/qwen-2.5-72b-instruct";
       const prompt = (newAgentPromptInput.value || "").trim();
 
       if (!key || !name || !prompt) {
@@ -1096,6 +1256,8 @@ document.addEventListener("DOMContentLoaded", () => {
             display_name: name,
             domain_category: domain,
             description: `Lead Orchestrator for ${name}`,
+            model_provider: provider,
+            model_name: model,
             system_prompt: prompt
           })
         });
@@ -1256,11 +1418,30 @@ document.addEventListener("DOMContentLoaded", () => {
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div>
               <h3 style="font-size: 16px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🛡️</span> ${escapeHtml(currentAgent.display_name)}</h3>
-              <div style="font-size: 12px; color: #94a3b8; margin-top: 2px;">Domain Category: <code>${escapeHtml(currentAgent.domain_category)}</code> | Model: <code>${escapeHtml(currentAgent.model_name)}</code></div>
+              <div style="font-size: 12px; color: #94a3b8; margin-top: 2px;">Domain Category: <code>${escapeHtml(currentAgent.domain_category)}</code></div>
             </div>
             <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; padding: 3px 8px;">Active Lead Agent</span>
           </div>
-          <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 10px;">${escapeHtml(currentAgent.description || '')}</div>
+          <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 12px;">${escapeHtml(currentAgent.description || '')}</div>
+
+          <!-- Model & LLM Provider Configuration Card -->
+          <div style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <strong style="font-size: 12px; color: #38bdf8; display: flex; align-items: center; gap: 6px;">🧠 OpenAI-Compliant LLM Model Configuration</strong>
+              <span style="font-size: 10px; color: #64748b;">Per-Agent Engine</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 2fr auto; gap: 8px; align-items: center;">
+              <select id="edit-agent-provider-${currentAgent.key_name}" style="background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none;">
+                <option value="openrouter" ${currentAgent.model_provider === 'openrouter' ? 'selected' : ''}>OpenRouter</option>
+                <option value="groq" ${currentAgent.model_provider === 'groq' ? 'selected' : ''}>Groq Cloud</option>
+                <option value="custom_openai" ${currentAgent.model_provider === 'custom_openai' ? 'selected' : ''}>Custom OpenAI Gateway</option>
+                <option value="ollama" ${currentAgent.model_provider === 'ollama' ? 'selected' : ''}>Local Ollama</option>
+              </select>
+              <input type="text" id="edit-agent-model-${currentAgent.key_name}" value="${escapeHtml(currentAgent.model_name || 'qwen/qwen-2.5-72b-instruct')}" placeholder="e.g. qwen/qwen-2.5-72b-instruct, gpt-4o, deepseek-r1" style="background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none; font-family: var(--font-mono);" />
+              <button onclick="saveAgentModel('${currentAgent.key_name}')" style="background: #0284c7; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 4px; cursor: pointer;">Save Model</button>
+            </div>
+            <div id="save-model-status-${currentAgent.key_name}" style="font-size: 11px; margin-top: 4px;"></div>
+          </div>
           
           <details style="margin-top: 8px; background: #0f172a; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px;">
             <summary style="font-size: 12px; font-weight: 600; color: #60a5fa; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
@@ -1343,12 +1524,59 @@ document.addEventListener("DOMContentLoaded", () => {
         })
       });
       const data = await resp.json();
-      if (data.status === "success" && statusEl) {
-        statusEl.innerHTML = `<span style="color: #10b981;">✓ System prompt updated successfully!</span>`;
-        setTimeout(() => { statusEl.innerHTML = ""; }, 3000);
+      if (data.status === "success") {
+        if (statusEl) {
+          statusEl.textContent = "✓ Prompt Saved";
+          statusEl.style.color = "#10b981";
+          setTimeout(() => { statusEl.textContent = ""; }, 2500);
+        }
       }
     } catch (e) {
-      alert("Failed to save agent prompt: " + e.message);
+      if (statusEl) {
+        statusEl.textContent = "✗ Error: " + e.message;
+        statusEl.style.color = "#ef4444";
+      }
+    }
+  };
+
+  window.saveAgentModel = async function(agentKey) {
+    const providerSel = document.getElementById(`edit-agent-provider-${agentKey}`);
+    const modelInput = document.getElementById(`edit-agent-model-${agentKey}`);
+    const statusEl = document.getElementById(`save-model-status-${agentKey}`);
+    if (!providerSel || !modelInput) return;
+
+    if (statusEl) {
+      statusEl.textContent = "⏳ Updating model...";
+      statusEl.style.color = "#fbbf24";
+    }
+
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/studio/agents/${agentKey}/model`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model_provider: providerSel.value,
+          model_name: modelInput.value.trim()
+        })
+      });
+      const data = await resp.json();
+      if (resp.ok && data.status === "success") {
+        if (statusEl) {
+          statusEl.textContent = `✓ Model updated to ${data.model_provider} (${data.model_name})`;
+          statusEl.style.color = "#10b981";
+          setTimeout(() => { statusEl.textContent = ""; }, 3000);
+        }
+      } else {
+        if (statusEl) {
+          statusEl.textContent = "✗ Update failed: " + (data.detail || "Error");
+          statusEl.style.color = "#ef4444";
+        }
+      }
+    } catch (e) {
+      if (statusEl) {
+        statusEl.textContent = "✗ Error: " + e.message;
+        statusEl.style.color = "#ef4444";
+      }
     }
   };
 

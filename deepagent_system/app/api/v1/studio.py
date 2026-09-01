@@ -159,6 +159,33 @@ async def save_agent(req: AgentCreateRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save agent: {e}")
 
+class AgentModelUpdateRequest(BaseModel):
+    model_provider: str
+    model_name: str
+
+@router.post("/agents/{key_name}/model")
+async def update_agent_model(key_name: str, req: AgentModelUpdateRequest):
+    """Updates the OpenAI-compatible model configuration for a specific Domain Agent."""
+    try:
+        agent = AgentRepository.get_agent_by_key(key_name)
+        if not agent:
+            raise HTTPException(status_code=404, detail=f"Agent '{key_name}' not found")
+        
+        AgentRepository.upsert_agent(
+            key_name=key_name,
+            display_name=agent["display_name"],
+            domain_category=agent["domain_category"],
+            description=agent.get("description", ""),
+            model_provider=req.model_provider.strip().lower(),
+            model_name=req.model_name.strip(),
+            system_prompt=agent["system_prompt"]
+        )
+        return {"status": "success", "key_name": key_name, "model_provider": req.model_provider, "model_name": req.model_name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update agent model: {e}")
+
 @router.post("/subagents")
 async def save_subagent(req: SubagentCreateRequest):
     """Creates or updates a Subagent bound to a Main Agent."""
