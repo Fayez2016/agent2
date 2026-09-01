@@ -53,7 +53,7 @@ class SupervisorDaemon:
                 await self.check_all_health()
             except Exception as e:
                 logger.error(f"Error during supervisor health check cycle: {e}", exc_info=True)
-            await asyncio.sleep(15)  # Check every 15 seconds
+            await asyncio.sleep(10)  # Check every 10 seconds
 
     async def check_all_health(self) -> Dict[str, Any]:
         now_str = datetime.now().isoformat()
@@ -129,8 +129,8 @@ class SupervisorDaemon:
                     elapsed = (asyncio.get_event_loop().time() - start_time) * 1000
                     latency_ms = round(elapsed, 1)
                     
-                    # Acceptable HTTP response codes from FastMCP / HTTP services
-                    if resp.status_code in [200, 404, 405, 406]:
+                    # FastMCP streamable endpoints return 200, 400 (missing session ID), 404, 405, 406 when active & listening
+                    if resp.status_code in [200, 400, 404, 405, 406]:
                         status = "healthy"
             except Exception as ex:
                 status = "unreachable"
