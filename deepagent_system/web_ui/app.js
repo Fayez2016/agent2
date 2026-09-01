@@ -353,7 +353,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <strong style="color: #60a5fa;">${escapeHtml(s.display_name || s.name)}</strong>
             <div style="display: flex; gap: 6px; align-items: center;">
               <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 10px; padding: 2px 6px;">${escapeHtml(s.domain_scope || 'linux')}</span>
-              ${s.name !== 'ansible' && s.name !== 'sop' ? `<button onclick="deleteMCPServer('${s.name}')" style="background: none; border: none; color: #ef4444; font-size: 11px; cursor: pointer;" title="Remove MCP Server">🗑️</button>` : ''}
+              <button onclick="deleteMCPServer('${s.name}')" style="background: none; border: none; color: #ef4444; font-size: 13px; cursor: pointer; padding: 0 4px;" title="Remove MCP Server">🗑️</button>
             </div>
           </div>
           <div style="color: #94a3b8; font-size: 11px; margin-top: 4px; word-break: break-all;"><code>${escapeHtml(s.url)}</code></div>
@@ -472,6 +472,93 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (e) {
         alert("Error creating agent: " + e.message);
+      }
+    });
+  }
+
+  // --- Create Subagent UI Handlers ---
+  const showAddSubagentBtn = document.getElementById("show-add-subagent-btn");
+  const addSubagentFormCard = document.getElementById("add-subagent-form-card");
+  const cancelAddSubagentBtn = document.getElementById("cancel-add-subagent-btn");
+  const saveNewSubagentBtn = document.getElementById("save-new-subagent-btn");
+  const newSubagentNameInput = document.getElementById("new-subagent-name");
+  const newSubagentToolsInput = document.getElementById("new-subagent-tools");
+  const newSubagentDescInput = document.getElementById("new-subagent-desc");
+  const newSubagentPromptInput = document.getElementById("new-subagent-prompt");
+  const addSubagentStatus = document.getElementById("add-subagent-status");
+
+  if (showAddSubagentBtn && addSubagentFormCard) {
+    showAddSubagentBtn.addEventListener("click", () => {
+      addSubagentFormCard.style.display = addSubagentFormCard.style.display === "none" ? "block" : "none";
+    });
+  }
+
+  if (cancelAddSubagentBtn && addSubagentFormCard) {
+    cancelAddSubagentBtn.addEventListener("click", () => {
+      addSubagentFormCard.style.display = "none";
+    });
+  }
+
+  if (saveNewSubagentBtn) {
+    saveNewSubagentBtn.addEventListener("click", async () => {
+      const name = (newSubagentNameInput.value || "").trim().toLowerCase();
+      const desc = (newSubagentDescInput.value || "").trim();
+      const prompt = (newSubagentPromptInput.value || "").trim();
+      const toolsStr = (newSubagentToolsInput.value || "").trim();
+      const toolBindings = toolsStr ? toolsStr.split(",").map(t => t.trim()).filter(Boolean) : [];
+
+      if (!name || !prompt) {
+        alert("Please provide a Subagent Name and System Prompt.");
+        return;
+      }
+
+      if (addSubagentStatus) {
+        addSubagentStatus.textContent = "⏳ Saving...";
+        addSubagentStatus.style.color = "#fbbf24";
+      }
+
+      try {
+        // Fetch current active agent's id
+        const respAg = await fetch(`${BASE_URL}/v1/studio/agents`);
+        const dataAg = await respAg.json();
+        const cur = (dataAg.agents || []).find(a => a.key_name === activeDomainKey);
+        if (!cur) {
+          alert("Active agent not found in database.");
+          return;
+        }
+
+        const resp = await fetch(`${BASE_URL}/v1/studio/subagents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            parent_agent_id: cur.id,
+            name: name,
+            display_name: name,
+            description: desc || name,
+            system_prompt: prompt,
+            tool_bindings: toolBindings
+          })
+        });
+        const data = await resp.json();
+        if (data.status === "success") {
+          if (addSubagentStatus) {
+            addSubagentStatus.textContent = "✓ Subagent Saved";
+            addSubagentStatus.style.color = "#10b981";
+          }
+          newSubagentNameInput.value = "";
+          newSubagentToolsInput.value = "";
+          newSubagentDescInput.value = "";
+          newSubagentPromptInput.value = "";
+          setTimeout(() => {
+            addSubagentFormCard.style.display = "none";
+            if (addSubagentStatus) addSubagentStatus.textContent = "";
+          }, 1500);
+          await loadStudioAgents();
+        } else {
+          alert("Failed to save subagent: " + data.detail);
+        }
+      } catch (e) {
+        alert("Error saving subagent: " + e.message);
       }
     });
   }

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
-    <link rel="stylesheet" href="/style.css?v=5.0" />
+    <link rel="stylesheet" href="/style.css?v=6.0" />
   </head>
   <body>
     <div class="app-container">
@@ -230,8 +230,37 @@
             <div style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <h3 style="font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🤖</span> Domain Subagents & Prompts</h3>
-                <span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; font-size: 11px; padding: 2px 6px;">Live Subagents</span>
+                <button id="show-add-subagent-btn" style="background: #a855f7; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add Subagent</button>
               </div>
+
+              <!-- Add Subagent Form (Collapsible) -->
+              <div id="add-subagent-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <h4 style="font-size: 13px; color: #c084fc; margin-bottom: 8px;">Attach New Subagent to Active Agent</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Subagent Name (Unique)</label>
+                    <input type="text" id="new-subagent-name" placeholder="e.g. ad_sync_operator" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                  <div>
+                    <label style="font-size: 11px; color: #94a3b8; display: block;">Tool Bindings (comma-separated)</label>
+                    <input type="text" id="new-subagent-tools" placeholder="e.g. ansible_run_command, ansible_send_email" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
+                  </div>
+                </div>
+                <div style="margin-top: 8px;">
+                  <label style="font-size: 11px; color: #94a3b8; display: block;">Description</label>
+                  <input type="text" id="new-subagent-desc" placeholder="Specialized operator for Active Directory synchronization" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 4px; outline: none;" />
+                </div>
+                <div style="margin-top: 8px;">
+                  <label style="font-size: 11px; color: #94a3b8; display: block;">Subagent System Prompt</label>
+                  <textarea id="new-subagent-prompt" rows="3" placeholder="You are the Active Directory sync subagent..." style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px; border-radius: 4px; outline: none; font-family: monospace;"></textarea>
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+                  <button id="save-new-subagent-btn" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save Subagent</button>
+                  <button id="cancel-add-subagent-btn" style="background: #475569; border: none; color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                  <span id="add-subagent-status" style="font-size: 11px;"></span>
+                </div>
+              </div>
+
               <div id="domain-subagents-list" style="display: flex; flex-direction: column; gap: 12px;">
                 <!-- Dynamically populated -->
               </div>
@@ -400,6 +429,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/app.js?v=5.0"></script>
+    <script src="/app.js?v=6.0"></script>
   </body>
 </html>
