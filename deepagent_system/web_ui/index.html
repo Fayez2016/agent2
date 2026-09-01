@@ -21,6 +21,14 @@
           <button id="new-chat-btn" class="new-chat-btn"><span>+</span> New</button>
         </div>
 
+        <!-- Dynamic Main Domain Switcher -->
+        <div style="padding: 10px 16px; border-bottom: 1px solid var(--border-color, #334155); background: rgba(0,0,0,0.2);">
+          <label style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; font-weight: 700; display: block; margin-bottom: 4px;">Active Domain Agent</label>
+          <select id="domain-agent-switcher" style="width: 100%; background: #1e293b; border: 1px solid #3b82f6; color: #60a5fa; font-weight: 600; font-size: 12px; padding: 6px 10px; border-radius: 6px; outline: none; cursor: pointer;">
+            <!-- Dynamically populated with all registered domain agents from PostgreSQL -->
+          </select>
+        </div>
+
         <div class="sidebar-content">
           <!-- Conversation Sessions -->
           <div class="sidebar-section">
@@ -162,17 +170,53 @@
           </table>
         </div>
 
-        <!-- View 3: Linux SRE Agent Studio View -->
-        <div id="studio-view" class="audit-view-container" style="display: none; padding: 24px; overflow-y: auto;">
+          <!-- Dynamic Studio Header & Domain Switcher -->
           <div class="audit-header" style="margin-bottom: 20px;">
             <div>
-              <h2 style="font-size: 20px; color: #f8fafc;">⚙️ Linux SRE Deep Agent Studio</h2>
-              <p style="font-size: 13px; color: #94a3b8; margin-top: 4px;">Inspect and configure the Linux SRE Lead Agent, FastMCP Tools, Subagent Prompts, and declarative SOP Skills.</p>
+              <h2 style="font-size: 20px; color: #f8fafc;">⚙️ Autonomous SRE Deep Agent Studio</h2>
+              <p style="font-size: 13px; color: #94a3b8; margin-top: 4px;">Inspect and configure Domain Lead Agents, FastMCP Tools, Subagent Prompts, and declarative SOP Skills.</p>
             </div>
-            <button class="refresh-btn" id="refresh-studio-btn">🔄 Refresh Studio Data</button>
+            <div style="display: flex; gap: 8px;">
+              <button class="refresh-btn" id="show-add-agent-btn" style="background: #8b5cf6; border-color: #7c3aed;">➕ Create Domain Agent</button>
+              <button class="refresh-btn" id="refresh-studio-btn">🔄 Refresh Studio Data</button>
+            </div>
           </div>
 
-          <!-- Linux SRE Main Agent Card -->
+          <!-- Create Domain Agent Form (Collapsible) -->
+          <div id="add-agent-form-card" style="display: none; background: #0f172a; border: 1px solid rgba(139, 92, 246, 0.4); border-radius: 10px; padding: 18px; margin-bottom: 20px;">
+            <h3 style="font-size: 15px; color: #c084fc; margin-bottom: 12px;">🤖 Register New Main Domain Agent</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+              <div>
+                <label style="font-size: 11px; color: #94a3b8; display: block;">Agent Key (Unique)</label>
+                <input type="text" id="new-agent-key" placeholder="e.g. windows_admin" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 4px; outline: none;" />
+              </div>
+              <div>
+                <label style="font-size: 11px; color: #94a3b8; display: block;">Display Name</label>
+                <input type="text" id="new-agent-name" placeholder="e.g. Windows Administrator SRE" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 4px; outline: none;" />
+              </div>
+              <div>
+                <label style="font-size: 11px; color: #94a3b8; display: block;">Domain Category</label>
+                <select id="new-agent-domain" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 4px; outline: none;">
+                  <option value="windows">windows</option>
+                  <option value="vmware">vmware</option>
+                  <option value="database">database</option>
+                  <option value="k8s">k8s</option>
+                  <option value="linux">linux</option>
+                </select>
+              </div>
+            </div>
+            <div style="margin-top: 10px;">
+              <label style="font-size: 11px; color: #94a3b8; display: block;">System Prompt</label>
+              <textarea id="new-agent-prompt" rows="3" placeholder="You are the Enterprise Windows Systems Administrator Deep Agent..." style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #fff; font-size: 12px; padding: 8px; border-radius: 4px; outline: none; font-family: monospace;"></textarea>
+            </div>
+            <div style="margin-top: 12px; display: flex; gap: 8px; align-items: center;">
+              <button id="save-new-agent-btn" style="background: #10b981; border: none; color: #fff; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 4px; cursor: pointer;">Save Main Agent</button>
+              <button id="cancel-add-agent-btn" style="background: #475569; border: none; color: #fff; font-size: 12px; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Cancel</button>
+              <span id="add-agent-status" style="font-size: 12px;"></span>
+            </div>
+          </div>
+
+          <!-- Main Agent Card -->
           <div id="linux-main-agent-card" style="background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 18px; margin-bottom: 20px;">
             <!-- Dynamically populated main prompt & agent specs -->
           </div>

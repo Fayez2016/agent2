@@ -58,6 +58,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function initApp() {
     await fetchHitlMode();
     await fetchNotificationEmail();
+    await populateDomainSwitcher();
     await loadThreads();
     startPendingHitlPolling();
   }
@@ -396,6 +397,110 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  // --- Create Domain Agent UI Handlers ---
+  const showAddAgentBtn = document.getElementById("show-add-agent-btn");
+  const addAgentFormCard = document.getElementById("add-agent-form-card");
+  const cancelAddAgentBtn = document.getElementById("cancel-add-agent-btn");
+  const saveNewAgentBtn = document.getElementById("save-new-agent-btn");
+  const newAgentKeyInput = document.getElementById("new-agent-key");
+  const newAgentNameInput = document.getElementById("new-agent-name");
+  const newAgentDomainSelect = document.getElementById("new-agent-domain");
+  const newAgentPromptInput = document.getElementById("new-agent-prompt");
+  const addAgentStatus = document.getElementById("add-agent-status");
+  const domainAgentSwitcher = document.getElementById("domain-agent-switcher");
+
+  let activeDomainKey = "linux_sre";
+
+  if (showAddAgentBtn && addAgentFormCard) {
+    showAddAgentBtn.addEventListener("click", () => {
+      addAgentFormCard.style.display = addAgentFormCard.style.display === "none" ? "block" : "none";
+    });
+  }
+
+  if (cancelAddAgentBtn && addAgentFormCard) {
+    cancelAddAgentBtn.addEventListener("click", () => {
+      addAgentFormCard.style.display = "none";
+    });
+  }
+
+  if (saveNewAgentBtn) {
+    saveNewAgentBtn.addEventListener("click", async () => {
+      const key = (newAgentKeyInput.value || "").trim().toLowerCase();
+      const name = (newAgentNameInput.value || "").trim();
+      const domain = newAgentDomainSelect.value || "linux";
+      const prompt = (newAgentPromptInput.value || "").trim();
+
+      if (!key || !name || !prompt) {
+        alert("Please provide an Agent Key, Display Name, and System Prompt.");
+        return;
+      }
+
+      if (addAgentStatus) {
+        addAgentStatus.textContent = "⏳ Saving...";
+        addAgentStatus.style.color = "#fbbf24";
+      }
+
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/studio/agents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            key_name: key,
+            display_name: name,
+            domain_category: domain,
+            description: `Lead Orchestrator for ${name}`,
+            system_prompt: prompt
+          })
+        });
+        const data = await resp.json();
+        if (data.status === "success") {
+          if (addAgentStatus) {
+            addAgentStatus.textContent = "✓ Agent Created";
+            addAgentStatus.style.color = "#10b981";
+          }
+          newAgentKeyInput.value = "";
+          newAgentNameInput.value = "";
+          newAgentPromptInput.value = "";
+          setTimeout(() => {
+            addAgentFormCard.style.display = "none";
+            if (addAgentStatus) addAgentStatus.textContent = "";
+          }, 1500);
+          await loadStudioAgents();
+          await populateDomainSwitcher();
+        } else {
+          alert("Failed to create agent: " + data.detail);
+        }
+      } catch (e) {
+        alert("Error creating agent: " + e.message);
+      }
+    });
+  }
+
+  if (domainAgentSwitcher) {
+    domainAgentSwitcher.addEventListener("change", (e) => {
+      activeDomainKey = e.target.value;
+      console.log("Switched active domain agent to:", activeDomainKey);
+      loadStudioAgents();
+    });
+  }
+
+  async function populateDomainSwitcher() {
+    if (!domainAgentSwitcher) return;
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/studio/agents`);
+      const data = await resp.json();
+      const agents = data.agents || [];
+      
+      domainAgentSwitcher.innerHTML = agents.map(a => `
+        <option value="${escapeHtml(a.key_name)}" ${a.key_name === activeDomainKey ? 'selected' : ''}>
+          ⚡ ${escapeHtml(a.display_name)} (${escapeHtml(a.domain_category)})
+        </option>
+      `).join("");
+    } catch (e) {
+      console.warn("Failed to populate domain switcher:", e);
+    }
+  }
+
   async function loadStudioAgents() {
     const mainCardEl = document.getElementById("linux-main-agent-card");
     const subListEl = document.getElementById("domain-subagents-list");
@@ -403,51 +508,64 @@ document.addEventListener("DOMContentLoaded", () => {
       const resp = await fetch(`${BASE_URL}/v1/studio/agents`);
       const data = await resp.json();
       const agents = data.agents || [];
-      const linuxAgent = agents.find(a => a.key_name === "linux_sre") || agents[0];
+      const currentAgent = agents.find(a => a.key_name === activeDomainKey) || agents[0] || {
+        display_name: "Linux SRE Lead Agent",
+        domain_category: "linux",
+        model_name: "qwen/qwen-2.5-72b-instruct",
+        description: "Primary SRE Orchestrator",
+        system_prompt: "Active SRE harness",
+        subagents: []
+      };
 
-      if (linuxAgent && mainCardEl) {
+      if (currentAgent && mainCardEl) {
         mainCardEl.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div>
-              <h3 style="font-size: 16px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🛡️</span> ${escapeHtml(linuxAgent.display_name)}</h3>
-              <div style="font-size: 12px; color: #94a3b8; margin-top: 2px;">Domain Category: <code>${escapeHtml(linuxAgent.domain_category)}</code> | Model: <code>${escapeHtml(linuxAgent.model_name)}</code></div>
+              <h3 style="font-size: 16px; color: #f8fafc; display: flex; align-items: center; gap: 8px;"><span>🛡️</span> ${escapeHtml(currentAgent.display_name)}</h3>
+              <div style="font-size: 12px; color: #94a3b8; margin-top: 2px;">Domain Category: <code>${escapeHtml(currentAgent.domain_category)}</code> | Model: <code>${escapeHtml(currentAgent.model_name)}</code></div>
             </div>
-            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; padding: 3px 8px;">Active Lead SRE</span>
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; padding: 3px 8px;">Active Lead Agent</span>
           </div>
-          <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 10px;">${escapeHtml(linuxAgent.description || '')}</div>
+          <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 10px;">${escapeHtml(currentAgent.description || '')}</div>
           <details style="background: #0f172a; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px;">
             <summary style="font-size: 12px; font-weight: 600; color: #60a5fa; cursor: pointer;">🔍 View Lead Orchestrator System Prompt</summary>
-            <pre style="margin-top: 8px; font-size: 11px; color: #94a3b8; white-space: pre-wrap; font-family: var(--font-mono); max-height: 180px; overflow-y: auto;">${escapeHtml(linuxAgent.system_prompt)}</pre>
+            <pre style="margin-top: 8px; font-size: 11px; color: #94a3b8; white-space: pre-wrap; font-family: var(--font-mono); max-height: 180px; overflow-y: auto;">${escapeHtml(currentAgent.system_prompt)}</pre>
           </details>
         `;
 
         if (subListEl) {
-          const subagents = linuxAgent.subagents || [];
-          subListEl.innerHTML = subagents.map(sub => `
-            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; font-size: 13px;">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <strong style="color: #c084fc; font-family: var(--font-mono); font-size: 12px;">🤖 ${escapeHtml(sub.name)}</strong>
-                <span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; font-size: 10px; padding: 2px 6px;">${(sub.tool_bindings || []).length} Tools</span>
-              </div>
-              <div style="color: #94a3b8; font-size: 11px; margin-top: 4px;">${escapeHtml(sub.description || '')}</div>
-              
-              <div style="margin-top: 8px; font-size: 11px;">
-                <span style="color: #64748b;">Bound FastMCP Tools:</span>
-                <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
-                  ${(sub.tool_bindings || []).map(tb => `<code style="font-size: 10px; background: #0f172a; padding: 2px 5px; border-radius: 3px; color: #38bdf8;">${escapeHtml(tb)}</code>`).join("")}
+          const subagents = currentAgent.subagents || [];
+          if (subagents.length === 0) {
+            subListEl.innerHTML = `<div style="color: #64748b; font-size: 12px; padding: 10px; background: rgba(255,255,255,0.02); border-radius: 6px;">No specialized subagents attached to this agent. All tasks executed by the Lead Orchestrator.</div>`;
+          } else {
+            subListEl.innerHTML = subagents.map(sub => `
+              <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; font-size: 13px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <strong style="color: #c084fc; font-family: var(--font-mono); font-size: 12px;">🤖 ${escapeHtml(sub.name)}</strong>
+                  <span class="badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; font-size: 10px; padding: 2px 6px;">${(sub.tool_bindings || []).length} Tools</span>
                 </div>
-              </div>
+                <div style="color: #94a3b8; font-size: 11px; margin-top: 4px;">${escapeHtml(sub.description || '')}</div>
+                
+                <div style="margin-top: 8px; font-size: 11px;">
+                  <span style="color: #64748b;">Bound FastMCP Tools:</span>
+                  <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
+                    ${(sub.tool_bindings || []).map(tb => `<code style="font-size: 10px; background: #0f172a; padding: 2px 5px; border-radius: 3px; color: #38bdf8;">${escapeHtml(tb)}</code>`).join("")}
+                  </div>
+                </div>
 
-              <details style="margin-top: 8px; background: #0f172a; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 4px; padding: 6px 10px;">
-                <summary style="font-size: 11px; font-weight: 600; color: #a855f7; cursor: pointer;">📜 Subagent System Prompt</summary>
-                <pre style="margin-top: 6px; font-size: 10px; color: #94a3b8; white-space: pre-wrap; font-family: var(--font-mono); max-height: 140px; overflow-y: auto;">${escapeHtml(sub.system_prompt)}</pre>
-              </details>
-            </div>
-          `).join("");
+                <details style="margin-top: 8px; background: #0f172a; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 4px; padding: 6px 10px;">
+                  <summary style="font-size: 11px; font-weight: 600; color: #a855f7; cursor: pointer;">📜 Subagent System Prompt</summary>
+                  <pre style="margin-top: 6px; font-size: 10px; color: #94a3b8; white-space: pre-wrap; font-family: var(--font-mono); max-height: 140px; overflow-y: auto;">${escapeHtml(sub.system_prompt)}</pre>
+                </details>
+              </div>
+            `).join("");
+          }
         }
       }
     } catch (e) {
-      if (mainCardEl) mainCardEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load Linux SRE agent: ${e.message}</div>`;
+      if (mainCardEl) mainCardEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load agent: ${e.message}</div>`;
+    }
+  }
     }
   }
 
@@ -726,6 +844,7 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({
           model: "deepagent",
           thread_id: currentThreadId,
+          domain: activeDomainKey || "linux_sre",
           stream: true,
           messages: [{ role: "user", content: promptText }]
         })
