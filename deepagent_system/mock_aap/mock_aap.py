@@ -21,6 +21,10 @@ job_counter = 1000
 CONSOLE_RECOVERED_HOSTS = set()
 PCS_FIXED_HOSTS = set()
 
+# Gmail SMTP Configuration
+GMAIL_USER = "fayez.soufyani@gmail.com"
+GMAIL_APP_PASS = "ypnw wgdw qlut fdca"
+
 def get_iso_now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -30,24 +34,23 @@ def extract_host_tokens(raw_str):
     import re
     return [t.strip() for t in re.split(r'[\s,;|]+', str(raw_str)) if t.strip()]
 
-def try_send_real_smtp_email(recipient: str, subject: str, body: str) -> bool:
-    """Attempts direct SMTP transmission if host network allows port 25/587."""
+def send_live_gmail_notification(recipient: str, subject: str, body: str) -> bool:
+    """Dispatches a real email to the operator Gmail inbox using TLS port 587."""
     try:
         msg = MIMEMultipart()
-        msg["From"] = "deepagent-sre@enterprise.local"
-        msg["To"] = recipient
-        msg["Subject"] = subject
+        msg["From"] = f"Deep Agent SRE <{GMAIL_USER}>"
+        msg["To"] = recipient or GMAIL_USER
+        msg["Subject"] = subject or "[SRE Report] Deep Agent Execution Summary"
         msg.attach(MIMEText(body, "plain"))
 
-        smtp_server = os.getenv("SMTP_SERVER", "localhost")
-        smtp_port = int(os.getenv("SMTP_PORT", "25"))
-        
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=2.0) as server:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10.0) as server:
+            server.starttls()
+            server.login(GMAIL_USER, GMAIL_APP_PASS)
             server.send_message(msg)
-            logger.info(f"Real SMTP email dispatched to {recipient} via {smtp_server}:{smtp_port}")
+            logger.info(f"✅ Real Gmail successfully dispatched to {recipient} via smtp.gmail.com:587")
             return True
     except Exception as e:
-        logger.info(f"SMTP delivery direct note: {e} (Simulated Mock AAP delivery logged for {recipient})")
+        logger.error(f"❌ Failed to dispatch live Gmail to {recipient}: {e}")
         return False
 
 # 10 Clusters Dynamic Registry
@@ -117,12 +120,12 @@ def launch_job(template_id):
             PCS_FIXED_HOSTS.add(h)
             logger.info(f"PCS Cluster Fix recorded for host: {h}")
 
-    # 3. Handle Send Email Notification (Real SMTP Attempt + Audit Log)
+    # 3. Handle Send Email Notification (Dispatch Real Gmail)
     if template_id == 109:
-        recipient = extra_vars.get('recipient', 'fayez.soufyani@gmail.com')
-        subj = extra_vars.get('subject', '[SRE Report] Deep Agent Execution Summary')
+        recipient = extra_vars.get('recipient', GMAIL_USER)
+        subj = extra_vars.get('subject', '[SRE Report] Deep Agent Maintenance Completed')
         body = extra_vars.get('body', 'Deep Agent SRE Maintenance Completed Successfully.')
-        try_send_real_smtp_email(recipient, subj, body)
+        send_live_gmail_notification(recipient, subj, body)
 
     jobs[job_id] = {
         "id": job_id,
@@ -213,7 +216,6 @@ def get_job_stdout(job_id):
         lines = [f"PLAY [Patch Fleet - DNF Package Updates ({len(targets)} Servers)] ****************"]
         lines.append("TASK [Apply Security & Enhancement Packages via DNF] ***************************")
         for t in targets:
-            # Simulate failure if target has 'err', 'fail', 'dnf', 'cluster3_node1', 'ha_cluster3_node1', 'rhel-prod-04'
             is_patch_failure = any(k in t.lower() for k in ["err", "fail", "dnf", "pkg_fail", "cluster3_node1", "ha_cluster3_node1", "rhel-prod-04", "prod-04"])
             if is_patch_failure:
                 lines.append(f"failed: [{t}] => {{ \"stage\": \"Patching\", \"error\": \"DNF Transaction Error: GPG key verification failed or package dependency conflict on {t}.\", \"reboot_required\": false }}")
@@ -247,7 +249,6 @@ def get_job_stdout(job_id):
         lines = [f"PLAY [Check Host Online - TCP Port 22 Verification ({len(targets)} Targets)] ****"]
         lines.append("TASK [Probe SSH Port 22 & Validate OS Uptime] **********************************")
         for t in targets:
-            # Simulate a soft-hang on hosts with 'hang', 'cluster7_node1', 'ha_cluster7_node1', or 'rhel-prod-08' before console recovery
             is_explicit_hang = ("hang" in t.lower() or "cluster7_node1" in t.lower() or "ha_cluster7_node1" in t.lower() or "rhel-prod-08" in t.lower() or "prod-08" in t.lower()) and (t not in CONSOLE_RECOVERED_HOSTS)
             if is_explicit_hang:
                 lines.append(f"failed: [{t}] => {{ \"online\": false, \"stage\": \"Reboot Verification\", \"error\": \"SSH Port 22 connection timed out (Kernel soft hang detected on {t}).\" }}")
@@ -312,7 +313,7 @@ def get_job_stdout(job_id):
 
     # 10. Send Email Notification
     if template_id == 109:
-        recipient = extra_vars.get('recipient', 'fayez.soufyani@gmail.com')
+        recipient = extra_vars.get('recipient', GMAIL_USER)
         subj = extra_vars.get('subject', '[SRE Report] Maintenance Completed')
         return f"""
 PLAY [Send Email Notification] *************************************************
