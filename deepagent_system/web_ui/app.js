@@ -102,9 +102,45 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         supervisorHealthBadge.title = data.summary || "Multi-MCP Supervisor Daemon";
       }
+
+      // Update Settings View Component Health Grid
+      const statDb = document.getElementById("health-stat-db");
+      const statLlm = document.getElementById("health-stat-llm");
+      const statAnsible = document.getElementById("health-stat-ansible");
+      const statSop = document.getElementById("health-stat-sop");
+
+      if (statDb) {
+        const isDbUp = data.database?.status === "healthy";
+        statDb.innerHTML = isDbUp ? "🟢 Healthy" : "🔴 Unreachable";
+        statDb.style.color = isDbUp ? "#10b981" : "#ef4444";
+      }
+      if (statLlm) {
+        const isLlmUp = data.llm_gateway?.status === "healthy";
+        statLlm.innerHTML = isLlmUp ? `🟢 Online (${data.llm_gateway?.provider || 'LLM'})` : "🔴 Degraded";
+        statLlm.style.color = isLlmUp ? "#10b981" : "#ef4444";
+      }
+      if (statAnsible && data.mcp_servers?.ansible) {
+        const isAnsUp = data.mcp_servers.ansible.status === "healthy";
+        statAnsible.innerHTML = isAnsUp ? `🟢 Online (${data.mcp_servers.ansible.latency_ms || 0}ms)` : "🔴 Offline";
+        statAnsible.style.color = isAnsUp ? "#10b981" : "#ef4444";
+      }
+      if (statSop && data.mcp_servers?.sop) {
+        const isSopUp = data.mcp_servers.sop.status === "healthy";
+        statSop.innerHTML = isSopUp ? `🟢 Online (${data.mcp_servers.sop.latency_ms || 0}ms)` : "🔴 Offline";
+        statSop.style.color = isSopUp ? "#10b981" : "#ef4444";
+      }
     } catch (e) {
       if (supervisorText) supervisorText.textContent = "Supervisor: Offline";
     }
+  }
+
+  const refreshHealthBtn = document.getElementById("refresh-health-btn");
+  if (refreshHealthBtn) {
+    refreshHealthBtn.addEventListener("click", async () => {
+      refreshHealthBtn.textContent = "⏳ Probing...";
+      await pollSupervisorHealth();
+      setTimeout(() => { refreshHealthBtn.textContent = "🔄 Probe All Components"; }, 1000);
+    });
   }
 
   function startSupervisorPolling() {
@@ -555,27 +591,43 @@ document.addEventListener("DOMContentLoaded", () => {
     const listEl = document.getElementById("mcp-servers-list");
     if (!listEl) return;
     try {
-      const resp = await fetch(`${BASE_URL}/v1/studio/mcp_servers`);
-      const data = await resp.json();
-      const servers = data.servers || [];
+      const [mcpResp, supResp] = await Promise.all([
+        fetch(`${BASE_URL}/v1/studio/mcp_servers`),
+        fetch(`${BASE_URL}/v1/system/supervisor`)
+      ]);
+      const mcpData = await mcpResp.json();
+      const supData = await supResp.json();
+      const servers = mcpData.servers || [];
+      const mcpStatuses = supData.mcp_servers || {};
 
-      listEl.innerHTML = servers.map(s => `
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 13px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <strong style="color: #60a5fa;">${escapeHtml(s.display_name || s.name)}</strong>
-            <div style="display: flex; gap: 6px; align-items: center;">
-              <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 10px; padding: 2px 6px;">${escapeHtml(s.domain_scope || 'linux')}</span>
-              <button onclick="deleteMCPServer('${s.name}')" style="background: none; border: none; color: #ef4444; font-size: 13px; cursor: pointer; padding: 0 4px;" title="Remove MCP Server">🗑️</button>
+      listEl.innerHTML = servers.map(s => {
+        const liveInfo = mcpStatuses[s.name] || {};
+        const isUp = liveInfo.status === "healthy";
+        const statusBadge = isUp 
+          ? `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.3);">🟢 Online (${liveInfo.latency_ms || 0}ms)</span>`
+          : `<span style="background: rgba(239, 68, 68, 0.15); color: #f87171; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">🔴 Unreachable</span>`;
+
+        return `
+          <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 13px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <strong style="color: #60a5fa;">${escapeHtml(s.display_name || s.name)}</strong>
+                ${statusBadge}
+              </div>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; font-size: 10px; padding: 2px 6px;">${escapeHtml(s.domain_scope || 'linux')}</span>
+                <button onclick="deleteMCPServer('${s.name}')" style="background: none; border: none; color: #ef4444; font-size: 13px; cursor: pointer; padding: 0 4px;" title="Remove MCP Server">🗑️</button>
+              </div>
             </div>
+            <div style="color: #94a3b8; font-size: 11px; margin-top: 4px; word-break: break-all;"><code>${escapeHtml(s.url)}</code></div>
+            <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 11px; color: #64748b;">Transport: ${escapeHtml(s.transport)}</span>
+              <button onclick="pingMCPServer('${s.name}')" style="background: #334155; border: 1px solid #475569; color: #f8fafc; font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer;">⚡ Ping / Live Tools</button>
+            </div>
+            <div id="mcp-ping-${s.name}" style="margin-top: 6px; font-size: 11px; display: none;"></div>
           </div>
-          <div style="color: #94a3b8; font-size: 11px; margin-top: 4px; word-break: break-all;"><code>${escapeHtml(s.url)}</code></div>
-          <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 11px; color: #64748b;">Transport: ${escapeHtml(s.transport)}</span>
-            <button onclick="pingMCPServer('${s.name}')" style="background: #334155; border: 1px solid #475569; color: #f8fafc; font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer;">⚡ Ping / Live Tools</button>
-          </div>
-          <div id="mcp-ping-${s.name}" style="margin-top: 6px; font-size: 11px; display: none;"></div>
-        </div>
-      `).join("");
+        `;
+      }).join("");
     } catch (e) {
       listEl.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Failed to load MCP servers: ${e.message}</div>`;
     }
