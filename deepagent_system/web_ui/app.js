@@ -161,13 +161,21 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const settingsLogoutBtn = document.getElementById("settings-logout-btn");
+
+  function performLogoff() {
+    if (confirm("Sign out of Deep Agent console?")) {
+      localStorage.removeItem("deepagent_session_token");
+      location.reload();
+    }
+  }
+
   if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
-      if (confirm("Sign out of Deep Agent console?")) {
-        localStorage.removeItem("deepagent_session_token");
-        showLoginModal();
-      }
-    });
+    logoutBtn.addEventListener("click", performLogoff);
+  }
+
+  if (settingsLogoutBtn) {
+    settingsLogoutBtn.addEventListener("click", performLogoff);
   }
 
   async function initApp() {

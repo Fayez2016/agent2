@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
-    <link rel="stylesheet" href="/style.css?v=22.0" />
+    <link rel="stylesheet" href="/style.css?v=23.0" />
   </head>
   <body>
     <div class="app-container">
@@ -91,10 +91,12 @@
               <span id="hitl-badge-text" style="color: #60a5fa; font-weight: 600;">🛡️ HITL</span>
             </div>
 
-            <!-- Operator Profile Badge -->
-            <div id="user-profile-badge" style="display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 20px; font-size: 11px; background: #1e293b; border: 1px solid #334155;">
+            <!-- Operator Profile & Logout Control (Step 9) -->
+            <div id="user-profile-badge" style="display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 20px; font-size: 11px; background: #1e293b; border: 1px solid #334155;">
               <span style="color: #38bdf8;">👤 <strong id="logged-user-name">admin</strong></span>
-              <button id="logout-btn" title="Sign out" style="background: none; border: none; color: #94a3b8; font-size: 12px; cursor: pointer; padding: 0; line-height: 1;">🚪</button>
+              <button id="logout-btn" title="Sign out / Log off" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; font-size: 10px; font-weight: 600; cursor: pointer; padding: 2px 7px; border-radius: 4px; display: flex; align-items: center; gap: 4px;">
+                <span>🚪</span> Sign Out
+              </button>
             </div>
           </div>
         </header>
@@ -556,6 +558,7 @@
                 <div style="display: flex; gap: 8px;">
                   <button id="show-change-pass-btn" style="background: #eab308; border: none; color: #000; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">🔑 Change Password</button>
                   <button id="show-add-user-btn" style="background: #0284c7; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">➕ Add User</button>
+                  <button id="settings-logout-btn" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 4px; cursor: pointer;">🚪 Sign Out</button>
                 </div>
               </div>
               <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Manage human operators, SRE on-call accounts, and administrator credentials persisted in PostgreSQL.</p>
@@ -686,6 +689,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/app.js?v=22.0"></script>
+    <script src="/app.js?v=23.0"></script>
   </body>
 </html>
