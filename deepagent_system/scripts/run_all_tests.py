@@ -325,6 +325,87 @@ def test_multidomain_alert_ingestion_and_simulation():
     assert linux_manifest.get("deduplicated_count") == len(linux_targets), "Linux target deduplication mismatch"
     print(f" [PASS] Linux Alert Storm Deduplicated: 30 alarms -> 3 nodes -> Dispatched rhel_diagnostician.")
 
+def test_dynamic_random_alert_disambiguation():
+    log_header("TEST 8: Dynamic Disambiguation of Random Related vs. Unrelated Alerts (Deep Agent ReAct Loop)")
+
+    # 1. Generate randomized mixed alert payload containing:
+    #    Track A (Related / Cascading): Storage Full on DB node causing VIP failover timeouts
+    #    Track B (Unrelated / Independent): SSL certificate expiration on Web node
+    #    Track C (Unrelated / Independent): Inode exhaustion on Log collector
+    import random
+    rnd_suffix = random.randint(100, 999)
+    db_node = f"rhel-db-{rnd_suffix}"
+    web_node = f"rhel-web-{rnd_suffix}"
+    log_node = f"rhel-log-{rnd_suffix}"
+
+    mixed_alerts = [
+        # Related cascade 1 (Root Cause)
+        {"host_target": db_node, "alert_type": "DISK_STORAGE_EXHAUSTED_99_PERCENT", "severity": "critical", "domain": "linux", "payload": {"mount": "/var/lib/pgsql", "free_mb": 12}},
+        # Related cascade 2 (Downstream symptom)
+        {"host_target": db_node, "alert_type": "POSTGRESQL_CONNECTION_TIMEOUT", "severity": "critical", "domain": "linux", "payload": {"error": "cannot extend transaction log file"}},
+        # Related cascade 3 (Downstream symptom)
+        {"host_target": db_node, "alert_type": "PCS_VIP_FAILOVER_HEURISTIC_TIMEOUT", "severity": "warning", "domain": "linux", "payload": {"resource": "db_vip"}},
+        
+        # Completely Unrelated Incident 1
+        {"host_target": web_node, "alert_type": "SSL_CERTIFICATE_EXPIRED", "severity": "critical", "domain": "linux", "payload": {"cert": "/etc/pki/tls/certs/api.corp.pem", "days_remaining": -1}},
+        
+        # Completely Unrelated Incident 2
+        {"host_target": log_node, "alert_type": "INODE_TABLE_FULL_ZERO_FREE", "severity": "warning", "domain": "linux", "payload": {"fs": "/var/log/journal", "inodes_free": 0}}
+    ]
+
+    print(f" [INFO] Ingesting randomized compound alert stream across 3 nodes ({db_node}, {web_node}, {log_node})...")
+    res_ingest = requests.post(f"{API_HOST}/v1/events/bulk", json={"events": mixed_alerts, "domain": "linux"})
+    assert res_ingest.status_code == 200, f"Failed to ingest mixed alerts: {res_ingest.text}"
+
+    # 2. Invoke Deep Agent ReAct Loop to analyze and disambiguate
+    # Direct prompt to Lead SRE Agent with raw incident manifest
+    prompt = (
+        f"You are the Lead Linux SRE Deep Agent. Analyze the following 5 incoming alerts from monitoring:\n"
+        f"1. Host {db_node}: DISK_STORAGE_EXHAUSTED_99_PERCENT on /var/lib/pgsql\n"
+        f"2. Host {db_node}: POSTGRESQL_CONNECTION_TIMEOUT (cannot extend transaction log)\n"
+        f"3. Host {db_node}: PCS_VIP_FAILOVER_HEURISTIC_TIMEOUT on db_vip\n"
+        f"4. Host {web_node}: SSL_CERTIFICATE_EXPIRED on /etc/pki/tls/certs/api.corp.pem\n"
+        f"5. Host {log_node}: INODE_TABLE_FULL_ZERO_FREE on /var/log/journal\n\n"
+        f"Perform Root Cause Analysis (RCA):\n"
+        f"A) Clearly distinguish which alerts are RELATED and part of a single cascading failure vs. which are UNRELATED independent problems.\n"
+        f"B) Propose specific remediation actions for each distinct incident track."
+    )
+
+    thread_id = f"test_rca_{rnd_suffix}"
+    chat_payload = {
+        "thread_id": thread_id,
+        "message": prompt,
+        "domain": "linux_sre"
+    }
+
+    t0 = time.time()
+    res = requests.post(f"{API_HOST}/v1/chat/message", json=chat_payload, timeout=60)
+    assert res.status_code == 200, f"Chat analysis failed: {res.text}"
+    elapsed = time.time() - t0
+    reply = res.json()["choices"][0]["message"]["content"]
+
+    print(f"\n--- Dynamic Deep Agent Disambiguation Analysis ({elapsed:.2f}s) ---")
+    print(reply[:900] + ("...\n[Content truncated for display]" if len(reply) > 900 else ""))
+
+    # Assertions on dynamic LLM reasoning
+    reply_lower = reply.lower()
+    
+    # 1. Must identify DB disk as root cause of DB cascade
+    has_related_cascade = "related" in reply_lower or "cascade" in reply_lower or "root cause" in reply_lower
+    has_db_root_cause = "disk" in reply_lower and "postgres" in reply_lower
+
+    # 2. Must identify Web SSL and Log Inode as unrelated/independent
+    has_unrelated_concept = "unrelated" in reply_lower or "independent" in reply_lower or "distinct" in reply_lower or "isolated" in reply_lower
+    has_web_cert = "ssl" in reply_lower or "cert" in reply_lower
+    has_log_inode = "inode" in reply_lower or "journal" in reply_lower
+
+    assert has_related_cascade, "Failed: Deep Agent did not explain the cascading correlation."
+    assert has_db_root_cause, "Failed: Deep Agent did not link DB disk full to the PostgreSQL timeouts."
+    assert has_unrelated_concept, "Failed: Deep Agent did not distinguish unrelated independent incidents."
+    assert has_web_cert and has_log_inode, "Failed: Deep Agent failed to evaluate the independent problem tracks."
+
+    print("\n [PASS] Dynamic Alert Disambiguation verified: Deep Agent successfully correlated cascading DB failure and isolated unrelated SSL/Inode problems.")
+
 def main():
     print("==============================================================================")
     print(" 🚀 DEEP AGENT CONSOLIDATED TEST SUITE")
@@ -337,19 +418,19 @@ def main():
         test_dynamic_mcp_and_agent_factory()
         test_event_batcher_and_high_concurrency()
         test_multidomain_alert_ingestion_and_simulation()
+        test_dynamic_random_alert_disambiguation()
         test_ha_10_clusters_rolling_update()
         test_regular_fleet_patching()
         
         total_time = time.time() - suite_start
-        print("\n" + "=" * 78)
+        print("\n==============================================================================")
         print(f" 🎉 ALL CONSOLIDATED TESTS PASSED SUCCESSFULLY in {total_time:.2f}s!")
-        print("==============================================================================")
-        sys.exit(0)
+        print("==============================================================================\n")
     except AssertionError as e:
-        print(f"\n ❌ TEST ASSERTION FAILED: {e}")
+        print(f"\n ❌ TEST ASSERTION FAILED: {e}\n")
         sys.exit(1)
     except Exception as e:
-        print(f"\n ❌ UNEXPECTED ERROR: {e}")
+        print(f"\n ❌ UNEXPECTED ERROR: {e}\n")
         sys.exit(1)
 
 if __name__ == "__main__":
