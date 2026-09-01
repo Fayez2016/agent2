@@ -614,14 +614,20 @@ document.addEventListener("DOMContentLoaded", () => {
             <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; padding: 3px 8px;">Active Lead Agent</span>
           </div>
           <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 10px;">${escapeHtml(currentAgent.description || '')}</div>
-          <div style="background: #0f172a; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 12px; font-weight: 600; color: #60a5fa;">✏️ Lead Orchestrator System Prompt</span>
-              <button onclick="saveAgentPrompt('${currentAgent.key_name}')" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 4px; cursor: pointer;">Save Prompt Changes</button>
+          
+          <details style="margin-top: 8px; background: #0f172a; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px;">
+            <summary style="font-size: 12px; font-weight: 600; color: #60a5fa; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+              <span>📜 Lead Orchestrator System Prompt</span>
+              <span style="font-size: 11px; color: #94a3b8;">Click to Edit</span>
+            </summary>
+            <div style="margin-top: 8px;">
+              <textarea id="edit-agent-prompt-${currentAgent.key_name}" rows="6" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #f8fafc; font-size: 11px; padding: 8px; border-radius: 4px; outline: none; font-family: var(--font-mono);">${escapeHtml(currentAgent.system_prompt)}</textarea>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                <div id="save-prompt-status-${currentAgent.key_name}" style="font-size: 11px;"></div>
+                <button onclick="saveAgentPrompt('${currentAgent.key_name}')" style="background: #10b981; border: none; color: #fff; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Save Prompt Changes</button>
+              </div>
             </div>
-            <textarea id="edit-agent-prompt-${currentAgent.key_name}" rows="5" style="width: 100%; background: #1e293b; border: 1px solid #334155; color: #f8fafc; font-size: 11px; padding: 8px; border-radius: 4px; outline: none; font-family: var(--font-mono);">${escapeHtml(currentAgent.system_prompt)}</textarea>
-            <div id="save-prompt-status-${currentAgent.key_name}" style="font-size: 11px; margin-top: 4px;"></div>
-          </div>
+          </details>
         `;
 
         if (subListEl) {
