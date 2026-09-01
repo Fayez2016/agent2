@@ -90,6 +90,29 @@ The system operates on a **Declarative Multi-Server FastMCP Architecture** coupl
 - **Subagent Prompts**: Click **`📜 Subagent System Prompt`** on any subagent card to expand, edit, and click **`Save Subagent Prompt`**.
 - **Declarative SOPs**: Under **Declarative SOP Skills**, click **`View & Edit Markdown SOP`**, edit the markdown procedure, and click **`Save SOP Markdown`**.
 
+### 1.5 Managing Scoped API Tokens & Webhook Integrations (Step 9)
+- **Generate Token**:
+  1. Open **`⚙️ Settings`** tab.
+  2. In the **🔑 Scoped API Tokens & Webhook Integrations** card, click **`➕ Generate Token`**.
+  3. Specify:
+     - **Token Name**: e.g., `Dynatrace SRE Alert Webhook`
+     - **Domain Scope**: `all`, `linux`, `windows`, or `vmware`.
+     - **Expiration**: `7d`, `30d`, `90d`, `1y`, or `never` (persistent).
+  4. Click **`Generate Key`**.
+  5. Copy the generated secret (`da_sec_*`).
+- **Token Revocation**:
+  - Click **`Revoke`** on any active token in the list to immediately invalidate external webhook access.
+
+### 1.6 User Management, Passwords & RBAC
+- **Change Password**: In the **👥 Operator Accounts & RBAC Roles** card, click **`🔑 Change Password`**, enter the current and new passwords, and submit.
+- **Add Operator**: Click **`➕ Add User`** to create accounts with specific RBAC roles (`operator`, `admin`, `viewer`).
+- **Sign Out**: Click the **`🚪 Sign Out`** button in the header or in the Settings tab to terminate your session.
+
+### 1.7 Inbound Webhooks & 5-Minute Event Deduplication (Step 5 & 8.5)
+- Access the **`⚡ Alarms`** tab to monitor raw alert storms ingested from third-party monitoring tools (Dynatrace, Prometheus, SolarWinds, Datadog).
+- Click **`⚡ Simulate 20-Alarm Storm`** to test high-frequency burst absorption.
+- Click **`🚀 Process & Deduplicate Batch Now`** to trigger the 5-minute deduplicator and auto-generate an incident thread.
+
 ---
 
 ## 💻 Part 2: Developer Implementation Guide (Building New MCP Servers & Tools)
@@ -226,23 +249,6 @@ Add the service to your container stack:
 
 ---
 
-### 2.4 How the Dynamic Agent Engine Auto-Discovers Tools
-
-Once your FastMCP container is running:
-1. Register it in PostgreSQL via the UI: `http://deepagent-windows-mcp:8002/mcp` with domain scope `windows`.
-2. The core `app/mcp_client.py` connects to the server via `MultiServerMCPClient`:
-   ```python
-   client = MultiServerMCPClient(
-       server_factories={
-           "windows_mcp": lambda: StreamableHttpMCPClient(url="http://deepagent-windows-mcp:8002/mcp")
-       }
-   )
-   tools = await client.get_tools()
-   ```
-3. The LangGraph engine binds all tools matching the subagent's `tool_bindings` configuration automatically.
-
----
-
 ## 🔒 Part 3: HITL (Human-In-The-Loop) Safety Directives
 
 When writing tools that make changes to live infrastructure, follow the HITL security conventions specified in `AGENTS.md`:
@@ -263,7 +269,7 @@ When writing tools that make changes to live infrastructure, follow the HITL sec
 
 ## 📊 Database Schema Reference
 
-The multi-domain platform state is governed by four core relational tables in PostgreSQL:
+The multi-domain platform state is governed by core relational tables in PostgreSQL:
 
 | Table | Purpose | Key Columns |
 | :--- | :--- | :--- |
@@ -271,6 +277,9 @@ The multi-domain platform state is governed by four core relational tables in Po
 | `domain_subagents` | Specialized Worker Agents | `id, parent_agent_id, name, display_name, system_prompt, tool_bindings (JSONB)` |
 | `mcp_servers` | FastMCP Endpoint Registry | `id, name, display_name, domain_scope, url, transport, is_active` |
 | `domain_skills` | Declarative SOP Procedures | `id, name, display_name, domain_category, description, content_markdown` |
+| `users` | Operator Accounts & RBAC | `id, username, password_hash, role, email, created_at, is_active` |
+| `api_tokens` | Scoped Webhook Tokens | `id, token_hash, name, scope, domain_category, created_by, expires_at, is_active` |
+| `collected_events`| 5-Minute Ingestion Buffer | `id, host_target, alert_type, severity, domain, payload (JSONB), processed` |
 
 ---
 
