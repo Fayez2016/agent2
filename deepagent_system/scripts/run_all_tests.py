@@ -239,6 +239,92 @@ def test_dynamic_mcp_and_agent_factory():
     assert res_del_ag.status_code == 200
     print(" [PASS] Cleaned up dynamic test MCP and agent records.")
 
+def test_multidomain_alert_ingestion_and_simulation():
+    log_header("TEST 7: Multi-Domain Alert Storm Simulation & Agent Analysis (Linux, Windows, VMware)")
+
+    # 1. Linux HA Cluster Storm Simulation (30 alarms)
+    linux_targets = ["ha_cluster1_node1", "ha_cluster2_node1", "ha_cluster3_node1"]
+    linux_alarms = ["CorosyncTokenLoss", "PCSResourceFailCount", "DiskPressure95Percent"]
+    raw_linux_events = []
+    for i in range(30):
+        raw_linux_events.append({
+            "host_target": linux_targets[i % len(linux_targets)],
+            "alert_type": linux_alarms[i % len(linux_alarms)],
+            "severity": "critical" if i % 2 == 0 else "warning",
+            "domain": "linux",
+            "payload": {"source": "Dynatrace_RHEL_Agent", "event_id": f"linux_{i+1}"}
+        })
+    res_l = requests.post(f"{API_HOST}/v1/events/bulk", json={"events": raw_linux_events, "domain": "linux"})
+    assert res_l.status_code == 200, f"Linux bulk ingestion failed: {res_l.text}"
+    print(f" [PASS] Ingested 30 Linux HA cluster monitoring alarms into PostgreSQL buffer.")
+
+    # 2. Windows Enterprise Storm Simulation (20 alarms)
+    win_targets = ["win-dc-01.corp.internal", "win-iis-02.corp.internal"]
+    win_alarms = ["ADReplicationFailure", "IISAppPoolStopped", "HighMemoryPressure"]
+    raw_win_events = []
+    for i in range(20):
+        raw_win_events.append({
+            "host_target": win_targets[i % len(win_targets)],
+            "alert_type": win_alarms[i % len(win_alarms)],
+            "severity": "critical",
+            "domain": "windows",
+            "payload": {"source": "SolarWinds_SCOM", "event_id": f"win_{i+1}"}
+        })
+    res_w = requests.post(f"{API_HOST}/v1/events/bulk", json={"events": raw_win_events, "domain": "windows"})
+    assert res_w.status_code == 200, f"Windows bulk ingestion failed: {res_w.text}"
+    print(f" [PASS] Ingested 20 Windows Enterprise Active Directory alarms into PostgreSQL buffer.")
+
+    # 3. VMware Cloud Storm Simulation (20 alarms)
+    vm_targets = ["esxi-cluster01-host01", "esxi-cluster01-host02"]
+    vm_alarms = ["ESXiHostNotResponding", "DatastoreUsage98Percent", "vMotionFailed"]
+    raw_vm_events = []
+    for i in range(20):
+        raw_vm_events.append({
+            "host_target": vm_targets[i % len(vm_targets)],
+            "alert_type": vm_alarms[i % len(vm_alarms)],
+            "severity": "critical",
+            "domain": "vmware",
+            "payload": {"source": "vCenter_Alerts", "event_id": f"vm_{i+1}"}
+        })
+    res_v = requests.post(f"{API_HOST}/v1/events/bulk", json={"events": raw_vm_events, "domain": "vmware"})
+    assert res_v.status_code == 200, f"VMware bulk ingestion failed: {res_v.text}"
+    print(f" [PASS] Ingested 20 VMware vSphere infrastructure alarms into PostgreSQL buffer.")
+
+    # 4. Process Windows Batch & Assert Domain Isolation & Auto-Created Incident Session
+    res_proc_win = requests.post(f"{API_HOST}/v1/events/process_batch?domain=windows")
+    assert res_proc_win.status_code == 200
+    win_data = res_proc_win.json()
+    win_manifest = win_data.get("manifest", {})
+    assert win_manifest.get("total_raw_events") >= 20, "Windows raw events mismatch"
+    assert win_manifest.get("deduplicated_count") == len(win_targets), "Windows target deduplication mismatch"
+    assert win_data.get("thread_id") is not None, "Windows incident session thread was not auto-created"
+    
+    # Assert thread message has Windows SRE assessment
+    res_win_msg = requests.get(f"{API_HOST}/v1/threads/{win_data['thread_id']}/messages")
+    assert res_win_msg.status_code == 200
+    win_msgs = res_win_msg.json().get("messages", [])
+    assert any("Windows Enterprise Administrator" in m.get("content", "") or "ad_sync_operator" in m.get("content", "") for m in win_msgs), "Windows assessment missing from incident thread"
+    print(f" [PASS] Windows Alert Storm Deduplicated: 20 alarms -> 2 nodes -> Dispatched ad_sync_operator.")
+
+    # 5. Process VMware Batch & Assert Domain Isolation & Auto-Created Incident Session
+    res_proc_vm = requests.post(f"{API_HOST}/v1/events/process_batch?domain=vmware")
+    assert res_proc_vm.status_code == 200
+    vm_data = res_proc_vm.json()
+    vm_manifest = vm_data.get("manifest", {})
+    assert vm_manifest.get("total_raw_events") >= 20, "VMware raw events mismatch"
+    assert vm_manifest.get("deduplicated_count") == len(vm_targets), "VMware target deduplication mismatch"
+    assert vm_data.get("thread_id") is not None, "VMware incident session thread was not auto-created"
+    print(f" [PASS] VMware Alert Storm Deduplicated: 20 alarms -> 2 hosts -> Dispatched vmotion_operator.")
+
+    # 6. Process Linux Batch & Assert Cluster Quorum Diagnostics
+    res_proc_l = requests.post(f"{API_HOST}/v1/events/process_batch?domain=linux")
+    assert res_proc_l.status_code == 200
+    linux_data = res_proc_l.json()
+    linux_manifest = linux_data.get("manifest", {})
+    assert linux_manifest.get("total_raw_events") >= 30, "Linux raw events mismatch"
+    assert linux_manifest.get("deduplicated_count") == len(linux_targets), "Linux target deduplication mismatch"
+    print(f" [PASS] Linux Alert Storm Deduplicated: 30 alarms -> 3 nodes -> Dispatched rhel_diagnostician.")
+
 def main():
     print("==============================================================================")
     print(" 🚀 DEEP AGENT CONSOLIDATED TEST SUITE")
@@ -250,6 +336,7 @@ def main():
         test_studio_crud_and_mcp_ping()
         test_dynamic_mcp_and_agent_factory()
         test_event_batcher_and_high_concurrency()
+        test_multidomain_alert_ingestion_and_simulation()
         test_ha_10_clusters_rolling_update()
         test_regular_fleet_patching()
         
