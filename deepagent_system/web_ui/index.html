@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
-    <link rel="stylesheet" href="/style.css?v=20.0" />
+    <link rel="stylesheet" href="/style.css?v=21.0" />
   </head>
   <body>
     <div class="app-container">
@@ -33,49 +33,32 @@
         </div>
 
         <div class="sidebar-content">
-          <!-- Conversation Sessions -->
-          <div class="sidebar-section">
-            <h3>Saved Sessions</h3>
-            <div class="threads-list" id="threads-list">
+          <!-- Conversation Sessions (Primary focus in sidebar) -->
+          <div class="sidebar-section" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <h3 style="margin: 0;">Sessions History</h3>
+            </div>
+            <div class="threads-list" id="threads-list" style="flex: 1; max-height: none; overflow-y: auto;">
               <!-- Dynamically populated from PostgreSQL with Date-Time naming -->
             </div>
           </div>
 
-          <!-- Quick Action Chips -->
-          <div class="sidebar-section">
+          <!-- Quick Operations (Compact Chips) -->
+          <div class="sidebar-section" style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
             <h3>Quick Operations</h3>
-            <div class="quick-actions-list">
-              <button class="chip-btn" data-prompt="Using ha_cluster_patcher subagent, execute the Red Hat HA Rolling Update (SOP 2059253) across 10 HA clusters (ha_cluster1 to ha_cluster10). Discover nodes, apply wave 1 standby, patch, reboot with console recovery if needed, unstandby, isolate failures, and execute wave 2 on healthy clusters.">
-                <span>🔄</span> HA Rolling Update (10 Clusters)
+            <div class="quick-actions-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+              <button class="chip-btn" style="padding: 6px 8px; font-size: 11px;" data-prompt="Using ha_cluster_patcher subagent, execute the Red Hat HA Rolling Update (SOP 2059253) across 10 HA clusters (ha_cluster1 to ha_cluster10). Discover nodes, apply wave 1 standby, patch, reboot with console recovery if needed, unstandby, isolate failures, and execute wave 2 on healthy clusters.">
+                <span>🔄</span> HA Rolling Update
               </button>
-              <button class="chip-btn" data-prompt="Using fleet_patcher subagent, execute fleet patching on hosts rhel-prod-01 to rhel-prod-10: inspect server inventory, apply package updates, execute managed reboots, verify online status, and email report.">
-                <span>📦</span> Fleet Patching (10 Hosts)
+              <button class="chip-btn" style="padding: 6px 8px; font-size: 11px;" data-prompt="Using fleet_patcher subagent, execute fleet patching on hosts rhel-prod-01 to rhel-prod-10: inspect server inventory, apply package updates, execute managed reboots, verify online status, and email report.">
+                <span>📦</span> Fleet Patching
               </button>
-              <button class="chip-btn" data-prompt="Execute cluster health check on ha_cluster1 and ha_cluster2 and verify quorum, node membership, and fencing configuration.">
-                <span>🔍</span> Check Cluster Health
+              <button class="chip-btn" style="padding: 6px 8px; font-size: 11px;" data-prompt="Execute cluster health check on ha_cluster1 and ha_cluster2 and verify quorum, node membership, and fencing configuration.">
+                <span>🔍</span> Health Check
               </button>
-              <button class="chip-btn" data-prompt="Delegate to the rhel_diagnostician subagent to inspect cluster health across all clusters.">
-                <span>🤖</span> Run Diagnostics Subagent
+              <button class="chip-btn" style="padding: 6px 8px; font-size: 11px;" data-prompt="Delegate to the rhel_diagnostician subagent to inspect cluster health across all clusters.">
+                <span>🤖</span> Diagnostics
               </button>
-            </div>
-          </div>
-
-          <!-- Subagents Directory -->
-          <div class="sidebar-section">
-            <h3>Active Subagents</h3>
-            <div class="subagent-badge-list">
-              <div class="subagent-item">
-                <div class="subagent-name"><span>🤖</span> ha_cluster_patcher</div>
-                <div class="subagent-desc">Zero-downtime Red Hat HA rolling updates per SOP 2059253 with reboot matrix and email reporting.</div>
-              </div>
-              <div class="subagent-item">
-                <div class="subagent-name"><span>🤖</span> fleet_patcher</div>
-                <div class="subagent-desc">Enterprise DNF package updates, managed reboots, uptime verification, and console recovery.</div>
-              </div>
-              <div class="subagent-item">
-                <div class="subagent-name"><span>🤖</span> rhel_diagnostician</div>
-                <div class="subagent-desc">Pre-patch node inspection and cluster diagnostic summaries.</div>
-              </div>
             </div>
           </div>
         </div>
@@ -83,48 +66,43 @@
         <div class="sidebar-footer">
           <div class="status-indicator">
             <div class="status-dot"></div>
-            <span>Ansible MCP Bridge Active</span>
+            <span>Ansible MCP Active</span>
           </div>
-          <span>:8000</span>
+          <span style="color: #64748b; font-size: 10px;">:8000</span>
         </div>
       </aside>
 
       <!-- Main Console -->
       <main class="main-console">
         <header class="console-header">
-          <!-- View Switcher Tabs -->
+          <!-- Sleek View Switcher Tabs -->
           <div class="view-tabs">
-            <button class="tab-btn active" id="tab-chat">💬 Chat & Orchestration</button>
-            <button class="tab-btn" id="tab-events">⚡ Webhooks & Alarms <span id="webhook-count-badge" style="background: #ef4444; color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 10px; margin-left: 4px; display: none;">0</span></button>
-            <button class="tab-btn" id="tab-audit">📜 Action Audit Trail</button>
-            <button class="tab-btn" id="tab-studio">⚙️ Agent & MCP Studio</button>
+            <button class="tab-btn active" id="tab-chat">💬 Chat</button>
+            <button class="tab-btn" id="tab-events">⚡ Alarms <span id="webhook-count-badge" style="background: #ef4444; color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 10px; margin-left: 2px; display: none;">0</span></button>
+            <button class="tab-btn" id="tab-audit">📜 Audit</button>
+            <button class="tab-btn" id="tab-studio">🤖 Studio</button>
             <button class="tab-btn" id="tab-settings">⚙️ Settings</button>
           </div>
 
-          <!-- Mode Indicator, Export & Hardware Badges -->
+          <!-- Clean Header Controls -->
           <div class="header-controls">
-            <!-- Export Incident Report -->
-            <button id="export-report-btn" class="export-btn" title="Export current session as Markdown/PDF report">
-              <span>📥</span> Export Report
+            <!-- Compact Export Button -->
+            <button id="export-report-btn" class="export-btn" title="Export incident report as Markdown / PDF" style="padding: 4px 10px; font-size: 11px;">
+              <span>📥</span> Export
             </button>
 
-            <!-- Supervisor Live Health Badge -->
-            <div id="supervisor-health-badge" style="display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); cursor: pointer;" title="Multi-MCP Supervisor Daemon: All services healthy">
-              <span id="supervisor-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
-              <span id="supervisor-text">Supervisor: Healthy</span>
+            <!-- Consolidated System Health & Guardrail Pill -->
+            <div id="system-status-pill" style="display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 20px; font-size: 11px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25);">
+              <span id="supervisor-dot" style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+              <span id="supervisor-text" style="color: #34d399; font-weight: 600;">Supervisor: Healthy</span>
+              <span style="color: #475569;">|</span>
+              <span id="hitl-badge-text" style="color: #60a5fa; font-weight: 600;">🛡️ HITL</span>
             </div>
 
-            <!-- HITL Status Badge Icon -->
-            <div id="hitl-indicator-badge" style="display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
-              <span id="hitl-badge-icon">🛡️</span>
-              <span id="hitl-badge-text">HITL Enforced</span>
-            </div>
-
-            <!-- Operator Profile & Logout Control (Step 9) -->
-            <div id="user-profile-badge" style="display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 20px; font-size: 12px; background: #1e293b; border: 1px solid #334155;">
+            <!-- Operator Profile Badge -->
+            <div id="user-profile-badge" style="display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 20px; font-size: 11px; background: #1e293b; border: 1px solid #334155;">
               <span style="color: #38bdf8;">👤 <strong id="logged-user-name">admin</strong></span>
-              <span class="badge" id="logged-user-role" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; font-size: 10px; padding: 1px 6px;">admin</span>
-              <button id="logout-btn" title="Sign out" style="background: none; border: none; color: #94a3b8; font-size: 12px; cursor: pointer; padding: 0 2px; margin-left: 2px;">🚪</button>
+              <button id="logout-btn" title="Sign out" style="background: none; border: none; color: #94a3b8; font-size: 12px; cursor: pointer; padding: 0; line-height: 1;">🚪</button>
             </div>
           </div>
         </header>
@@ -716,6 +694,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/app.js?v=20.0"></script>
+    <script src="/app.js?v=21.0"></script>
   </body>
 </html>
