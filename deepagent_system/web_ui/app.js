@@ -63,9 +63,112 @@ document.addEventListener("DOMContentLoaded", () => {
   const supervisorDot = document.getElementById("supervisor-dot");
   const supervisorText = document.getElementById("supervisor-text");
 
+  // Auth DOM References (Step 9)
+  const loginModalOverlay = document.getElementById("login-modal-overlay");
+  const loginForm = document.getElementById("login-form");
+  const loginUsernameInput = document.getElementById("login-username");
+  const loginPasswordInput = document.getElementById("login-password");
+  const loginErrorMsg = document.getElementById("login-error-msg");
+  const loginSubmitBtn = document.getElementById("login-submit-btn");
+  const loggedUserName = document.getElementById("logged-user-name");
+  const loggedUserRole = document.getElementById("logged-user-role");
+  const logoutBtn = document.getElementById("logout-btn");
+
   let currentExportMarkdown = "";
 
-  initApp();
+  // Check auth session before bootstrapping app
+  checkAuthSession();
+
+  async function checkAuthSession() {
+    const sessionToken = localStorage.getItem("deepagent_session_token");
+    if (!sessionToken) {
+      showLoginModal();
+      return;
+    }
+
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/auth/me`, {
+        headers: { "Authorization": `Bearer ${sessionToken}` }
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        hideLoginModal();
+        updateUserProfilePill(data.user);
+        initApp();
+      } else {
+        localStorage.removeItem("deepagent_session_token");
+        showLoginModal();
+      }
+    } catch (e) {
+      console.warn("Auth check failed:", e);
+      // Fallback for offline mode
+      updateUserProfilePill({ username: "admin", role: "admin" });
+      hideLoginModal();
+      initApp();
+    }
+  }
+
+  function showLoginModal() {
+    if (loginModalOverlay) {
+      loginModalOverlay.style.display = "flex";
+    }
+  }
+
+  function hideLoginModal() {
+    if (loginModalOverlay) {
+      loginModalOverlay.style.display = "none";
+    }
+  }
+
+  function updateUserProfilePill(user) {
+    if (loggedUserName && user) loggedUserName.textContent = user.username || "admin";
+    if (loggedUserRole && user) loggedUserRole.textContent = user.role || "operator";
+  }
+
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      loginSubmitBtn.disabled = true;
+      loginSubmitBtn.textContent = "Signing In...";
+      loginErrorMsg.style.display = "none";
+
+      const username = loginUsernameInput.value.trim();
+      const password = loginPasswordInput.value.trim();
+
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === "success") {
+          localStorage.setItem("deepagent_session_token", data.session_token);
+          updateUserProfilePill(data.user);
+          hideLoginModal();
+          initApp();
+        } else {
+          loginErrorMsg.textContent = data.detail || "Invalid credentials";
+          loginErrorMsg.style.display = "block";
+        }
+      } catch (err) {
+        loginErrorMsg.textContent = "Server connection error: " + err.message;
+        loginErrorMsg.style.display = "block";
+      } finally {
+        loginSubmitBtn.disabled = false;
+        loginSubmitBtn.textContent = "Sign In to Console";
+      }
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      if (confirm("Sign out of Deep Agent console?")) {
+        localStorage.removeItem("deepagent_session_token");
+        showLoginModal();
+      }
+    });
+  }
 
   async function initApp() {
     await fetchHitlMode();

@@ -119,6 +119,13 @@
               <span id="hitl-badge-icon">🛡️</span>
               <span id="hitl-badge-text">HITL Enforced</span>
             </div>
+
+            <!-- Operator Profile & Logout Control (Step 9) -->
+            <div id="user-profile-badge" style="display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 20px; font-size: 12px; background: #1e293b; border: 1px solid #334155;">
+              <span style="color: #38bdf8;">👤 <strong id="logged-user-name">admin</strong></span>
+              <span class="badge" id="logged-user-role" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; font-size: 10px; padding: 1px 6px;">admin</span>
+              <button id="logout-btn" title="Sign out" style="background: none; border: none; color: #94a3b8; font-size: 12px; cursor: pointer; padding: 0 2px; margin-left: 2px;">🚪</button>
+            </div>
           </div>
         </header>
 
@@ -650,7 +657,38 @@
       </div>
     </div>
 
+    <!-- Fullscreen Operator Login Overlay (Step 9) -->
+    <div id="login-modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px); z-index: 9999; justify-content: center; align-items: center;">
+      <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; width: 100%; max-width: 400px; padding: 32px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="font-size: 36px; margin-bottom: 8px;">⚡</div>
+          <h2 style="color: #f8fafc; font-size: 20px; font-weight: 700;">Deep Agent SRE Login</h2>
+          <p style="color: #94a3b8; font-size: 13px; margin-top: 4px;">Sign in to access Autonomous Orchestration & HITL Approvals</p>
+        </div>
+
+        <form id="login-form">
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">Username</label>
+            <input type="text" id="login-username" value="admin" required placeholder="admin" style="width: 100%; background: #0f172a; border: 1px solid #334155; color: #fff; font-size: 14px; padding: 10px 12px; border-radius: 6px; outline: none;" />
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">Password</label>
+            <input type="password" id="login-password" value="admin123" required placeholder="••••••••" style="width: 100%; background: #0f172a; border: 1px solid #334155; color: #fff; font-size: 14px; padding: 10px 12px; border-radius: 6px; outline: none;" />
+          </div>
+
+          <div id="login-error-msg" style="display: none; color: #f87171; font-size: 12px; margin-bottom: 16px; text-align: center; background: rgba(239, 68, 68, 0.1); padding: 8px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2);"></div>
+
+          <button type="submit" id="login-submit-btn" style="width: 100%; background: #3b82f6; border: none; color: #fff; font-size: 14px; font-weight: 600; padding: 10px; border-radius: 6px; cursor: pointer; transition: background 0.2s;">Sign In to Console</button>
+        </form>
+
+        <div style="margin-top: 20px; text-align: center; font-size: 11px; color: #64748b;">
+          Default credentials: <code>admin</code> / <code>admin123</code>
+        </div>
+      </div>
+    </div>
+
     <!-- Scripts -->
-    <script src="/app.js?v=18.0"></script>
+    <script src="/app.js?v=19.0"></script>
   </body>
 </html>
