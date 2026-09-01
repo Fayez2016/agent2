@@ -1136,7 +1136,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const prompt = btn.getAttribute("data-prompt");
       if (prompt) {
         userInput.value = prompt;
-        inputForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+        userInput.focus();
       }
     });
   });
