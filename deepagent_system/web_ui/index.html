@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LangGraph Deep Agent | Enterprise SRE Orchestration</title>
-    <link rel="stylesheet" href="/style.css?v=11.0" />
+    <link rel="stylesheet" href="/style.css?v=12.0" />
   </head>
   <body>
     <div class="app-container">
@@ -104,6 +104,12 @@
             <button id="export-report-btn" class="export-btn" title="Export current session as Markdown/PDF report">
               <span>📥</span> Export Report
             </button>
+
+            <!-- Supervisor Live Health Badge -->
+            <div id="supervisor-health-badge" style="display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); cursor: pointer;" title="Multi-MCP Supervisor Daemon: All services healthy">
+              <span id="supervisor-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+              <span id="supervisor-text">Supervisor: Healthy</span>
+            </div>
 
             <!-- HITL Status Badge Icon -->
             <div id="hitl-indicator-badge" style="display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
@@ -514,6 +520,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/app.js?v=11.0"></script>
+    <script src="/app.js?v=12.0"></script>
   </body>
 </html>

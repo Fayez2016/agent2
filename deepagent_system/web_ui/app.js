@@ -59,6 +59,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const settingsModeLabel = document.getElementById("settings-mode-label");
   const hitlBadgeIcon = document.getElementById("hitl-badge-icon");
   const hitlBadgeText = document.getElementById("hitl-badge-text");
+  const supervisorHealthBadge = document.getElementById("supervisor-health-badge");
+  const supervisorDot = document.getElementById("supervisor-dot");
+  const supervisorText = document.getElementById("supervisor-text");
 
   let currentExportMarkdown = "";
 
@@ -70,8 +73,64 @@ document.addEventListener("DOMContentLoaded", () => {
     await populateDomainSwitcher();
     await loadThreads();
     await pollWebhookBufferCount();
+    await pollSupervisorHealth();
     startPendingHitlPolling();
     startWebhookPolling();
+    startSupervisorPolling();
+  }
+
+  // --- Multi-MCP Supervisor Daemon Polling ---
+  async function pollSupervisorHealth() {
+    try {
+      const resp = await fetch(`${BASE_URL}/v1/system/supervisor`);
+      const data = await resp.json();
+      const isHealthy = data.status === "healthy";
+      
+      if (supervisorHealthBadge && supervisorDot && supervisorText) {
+        if (isHealthy) {
+          supervisorHealthBadge.style.background = "rgba(16, 185, 129, 0.15)";
+          supervisorHealthBadge.style.borderColor = "rgba(16, 185, 129, 0.3)";
+          supervisorHealthBadge.style.color = "#34d399";
+          supervisorDot.style.background = "#10b981";
+          supervisorText.textContent = "Supervisor: Healthy";
+        } else {
+          supervisorHealthBadge.style.background = "rgba(239, 68, 68, 0.15)";
+          supervisorHealthBadge.style.borderColor = "rgba(239, 68, 68, 0.3)";
+          supervisorHealthBadge.style.color = "#f87171";
+          supervisorDot.style.background = "#ef4444";
+          supervisorText.textContent = "Supervisor: Degraded";
+        }
+        supervisorHealthBadge.title = data.summary || "Multi-MCP Supervisor Daemon";
+      }
+    } catch (e) {
+      if (supervisorText) supervisorText.textContent = "Supervisor: Offline";
+    }
+  }
+
+  function startSupervisorPolling() {
+    setInterval(pollSupervisorHealth, 10000);
+  }
+
+  if (supervisorHealthBadge) {
+    supervisorHealthBadge.addEventListener("click", async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/v1/system/supervisor`);
+        const data = await resp.json();
+        let details = `🛡️ Multi-MCP Supervisor Daemon Health Status\n`;
+        details += `Status: ${data.status.toUpperCase()}\n`;
+        details += `Database Pool: ${data.database?.status || 'unknown'}\n`;
+        details += `LLM Provider: ${data.llm_gateway?.provider || 'unknown'} (${data.llm_gateway?.status || 'unknown'})\n\n`;
+        details += `Connected MCP Servers:\n`;
+        if (data.mcp_servers) {
+          Object.entries(data.mcp_servers).forEach(([k, v]) => {
+            details += `- ${k} (${v.url}): ${v.status.toUpperCase()} [${v.latency_ms}ms]\n`;
+          });
+        }
+        alert(details);
+      } catch (e) {
+        alert("Failed to query supervisor: " + e.message);
+      }
+    });
   }
 
   // --- SRE Report Recipient Email Settings ---

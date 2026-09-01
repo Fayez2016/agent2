@@ -37,10 +37,29 @@ app.include_router(threads_router)
 app.include_router(studio_router)
 app.include_router(events_router)
 
+@app.on_event("startup")
+async def on_startup():
+    """Starts the Multi-MCP Supervisor Daemon on API server startup."""
+    from app.supervisor import SupervisorDaemon
+    daemon = SupervisorDaemon.get_instance()
+    await daemon.start()
+    logger.info("✓ SupervisorDaemon initialized and running background health loops.")
+
 @app.get("/health")
 async def health_check():
-    """Health probe endpoint."""
-    return {"status": "ok", "version": "2.0.0"}
+    """Comprehensive microservice & MCP health probe endpoint."""
+    from app.supervisor import SupervisorDaemon
+    daemon = SupervisorDaemon.get_instance()
+    state = daemon.get_health_state()
+    return state
+
+@app.get("/v1/system/supervisor")
+async def get_supervisor_status():
+    """Detailed supervisor status endpoint for Web UI monitoring."""
+    from app.supervisor import SupervisorDaemon
+    daemon = SupervisorDaemon.get_instance()
+    await daemon.check_all_health()
+    return daemon.get_health_state()
 
 if __name__ == "__main__":
     logger.info(f"Starting Deep Agent REST API server on port {settings.api_port}...")
