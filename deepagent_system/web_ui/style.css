@@ -652,6 +652,10 @@ input:checked + .slider:before {
   background-color: #070b14;
 }
 
+.trace-body.hidden {
+  display: none !important;
+}
+
 .trace-code {
   font-family: var(--font-mono);
   font-size: 12px;
