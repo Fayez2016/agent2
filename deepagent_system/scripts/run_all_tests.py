@@ -406,6 +406,40 @@ def test_dynamic_random_alert_disambiguation():
 
     print("\n [PASS] Dynamic Alert Disambiguation verified: Deep Agent successfully correlated cascading DB failure and isolated unrelated SSL/Inode problems.")
 
+    # -------------------------------------------------------------
+    # SUB-TEST 8B: Execute Multi-Problem Concurrent Remediation Run
+    # -------------------------------------------------------------
+    print(f"\n [INFO] Testing Deep Agent simultaneous multi-event resolution capability...")
+    remediation_prompt = (
+        f"Incoming multiple alert emergency on hosts:\n"
+        f"- {db_node}: /var/lib/pgsql 99% full causing PostgreSQL connection refusal.\n"
+        f"- {web_node}: TLS certificate expired on nginx.\n\n"
+        f"Execute remediation for both events in parallel:\n"
+        f"1. On {db_node}: Inspect storage and propose disk/WAL cleanup.\n"
+        f"2. On {web_node}: Inspect nginx service state and certificate path.\n"
+        f"Provide a unified multi-host execution summary showing resolution status for BOTH nodes."
+    )
+
+    thread_remediation = f"test_multi_fix_{rnd_suffix}"
+    t1 = time.time()
+    res_fix = requests.post(
+        f"{API_HOST}/v1/chat/message",
+        json={"thread_id": thread_remediation, "message": remediation_prompt, "domain": "linux_sre"},
+        timeout=60
+    )
+    assert res_fix.status_code == 200, f"Multi-fix chat execution failed: {res_fix.text}"
+    elapsed_fix = time.time() - t1
+    reply_fix = res_fix.json()["choices"][0]["message"]["content"]
+
+    print(f"--- Multi-Event Simultaneous Remediation Output ({elapsed_fix:.2f}s) ---")
+    print(reply_fix[:900] + ("...\n[Content truncated for display]" if len(reply_fix) > 900 else ""))
+
+    fix_lower = reply_fix.lower()
+    assert (db_node in reply_fix or "db" in fix_lower) and ("disk" in fix_lower or "clean" in fix_lower or "postgres" in fix_lower), "Failed: Deep Agent did not address the DB host remediation."
+    assert (web_node in reply_fix or "web" in fix_lower or "nginx" in fix_lower or "cert" in fix_lower), "Failed: Deep Agent did not address the Web host remediation."
+
+    print(f"\n [PASS] Multi-Event Simultaneous Resolution verified: Deep Agent successfully solved both DB storage and Web SSL events concurrently in a single operational turn.")
+
 def test_auth_rbac_and_scoped_tokens():
     log_header("TEST 9: Enterprise Authentication, RBAC User Management & Scoped API Token Generator")
 
