@@ -92,6 +92,11 @@ http {
             proxy_set_header Host $host;
             proxy_set_header X-Forwarded-Proto https;
         }
+        location /health {
+            proxy_pass http://deepagent_api/health;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Proto https;
+        }
         location /v1/ {
             proxy_pass http://deepagent_api;
             proxy_set_header Host $host;
@@ -195,7 +200,7 @@ podman compose -f docker-compose.production.yml up -d
 echo -e "\n🔍 Executing Automated Health Probing..."
 for i in {1..15}; do
     echo -n "  ⏳ Probe ${i}/15 ... "
-    if curl -k -s -f https://localhost:8443/ >/dev/null 2>&1 && curl -k -s -f https://localhost:8443/v1/system/supervisor >/dev/null 2>&1; then
+    if curl -k -s -f https://localhost:8443/ >/dev/null 2>&1 && curl -k -s -f https://localhost:8443/health >/dev/null 2>&1; then
         echo "🟢 All Services Healthy!"
         break
     fi
