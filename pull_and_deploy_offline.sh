@@ -201,9 +201,39 @@ for c in "${CONTAINERS[@]}"; do
 done
 podman volume rm -f deepagent_system_hitl-db-vol 2>/dev/null || true
 
-# 7. Start Stack via Podman Compose
-cd "${COMPOSE_DIR}"
-podman compose -f docker-compose.production.yml up -d
+# 7. Start Stack in Podman Network
+podman network create deepagent_prod_net 2>/dev/null || true
+
+podman run -d --name deepagent-hitl-db --net deepagent_prod_net \
+  -e POSTGRES_USER=hermes -e POSTGRES_PASSWORD=secret456 -e POSTGRES_DB=hitl \
+  "${REGISTRY}/deepagent-hitl-db:latest"
+
+podman run -d --name deepagent-aap-server --net deepagent_prod_net \
+  "${REGISTRY}/deepagent-mock-aap:latest"
+
+podman run -d --name deepagent-ansible-mcp --net deepagent_prod_net \
+  -e AAP_HOST=deepagent-aap-server:5000 -e AAP_TOKEN=mock-token \
+  -e DATABASE_URL=postgresql://hermes:secret456@deepagent-hitl-db:5432/hitl \
+  "${REGISTRY}/deepagent-ansible-mcp:latest"
+
+podman run -d --name deepagent-sop-mcp --net deepagent_prod_net \
+  -e DATABASE_URL=postgresql://hermes:secret456@deepagent-hitl-db:5432/hitl \
+  "${REGISTRY}/deepagent-sop-mcp:latest"
+
+podman run -d --name deepagent-webui --net deepagent_prod_net \
+  "${REGISTRY}/deepagent-hitl-web:latest"
+
+podman run -d --name deepagent-service --net deepagent_prod_net \
+  -e DATABASE_URL=postgresql://hermes:secret456@deepagent-hitl-db:5432/hitl \
+  -e ANSIBLE_MCP_URL=http://deepagent-ansible-mcp:8000/mcp \
+  -e SOP_MCP_URL=http://deepagent-sop-mcp:8001/mcp \
+  "${REGISTRY}/deepagent-core:latest"
+
+podman run -d --name deepagent-proxy --net deepagent_prod_net \
+  -p 8080:8080 -p 8443:8443 \
+  -v "${PROXY_DIR}/nginx.conf:/etc/nginx/nginx.conf:ro,Z" \
+  -v "${SSL_DIR}:/etc/nginx/ssl:ro,Z" \
+  "${REGISTRY}/deepagent-proxy:latest"
 
 # 8. Automated Health Probing & Diagnostic Verification
 echo -e "\n🔍 Executing Automated Health Probing & Authentication Diagnostic..."
@@ -212,11 +242,11 @@ for i in {1..20}; do
     echo -n "  ⏳ Probe ${i}/20 ... "
     AUTH_RESP=$(curl -k -s -X POST https://localhost:8443/v1/auth/login \
         -H "Content-Type: application/json" \
-        -d '{"username":"admin","password":"adminpassword"}' 2>/dev/null || true)
+        -d '{"username":"admin","password":"admin123"}' 2>/dev/null || true)
     
     if curl -k -s -f https://localhost:8443/ >/dev/null 2>&1 && \
        curl -k -s -f https://localhost:8443/health >/dev/null 2>&1 && \
-       echo "${AUTH_RESP}" | grep -q "token"; then
+       echo "${AUTH_RESP}" | grep -q "session_token"; then
         echo "🟢 All Services & Auth API Healthy!"
         ALL_HEALTHY=true
         break
