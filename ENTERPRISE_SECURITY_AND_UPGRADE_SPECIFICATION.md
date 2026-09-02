@@ -118,30 +118,25 @@ Sensitive credentials stored in PostgreSQL (`system_settings` and `mcp_servers`)
 
 ---
 
-### 1.4 Tool-Level Security Boundaries & Mandatory HITL Governance
-To keep the codebase simple, maintainable, and prevent accidental infrastructure outages, governance is enforced at the **Tool Execution Boundary**:
+### 1.4 Autonomous Operational Governance & Simple Low-Maintenance Security
+In **Autonomous Mode**, the platform executes remediation, rolling updates, and cluster maintenance **100% autonomously without requiring human button clicks**, while keeping security simple, foolproof, and easy to maintain without complex regex:
 
-#### **A. Catastrophic Actions Policy (Non-Bypassable HITL)**
-Even if the system guardrail setting is switched to **`Autonomous Mode`**, the platform enforces an **Immutable Hard-Stop HITL Policy** on Tier-1 Catastrophic / Mutating Operations:
-- **Immutable HITL Tier-1 Operations**:
-  - `Limited Run Any Command` (`ansible_run_command`) — Any raw shell execution.
-  - `PCS Cluster Stop` & `PCS Cluster Disable` — Actions causing total cluster outage.
-  - `Reboot Host` & `Reboot Fleet` — Server restart operations.
-  - `VMware VM Reset` — Hypervisor hard reset operations.
-- **Autonomous Mode Scope**:
-  - In `Autonomous Mode`, only standard low-risk automated remediation (e.g. `ansible_expand_fs`, `ansible_patch_fleet` in pre-approved maintenance windows, `ansible_pcs_node_standby` during rolling updates, and log retrieval) proceeds autonomously.
-  - Any raw shell execution, full cluster halt, or host reboot **MUST ALWAYS trigger a Human-In-The-Loop approval card in the UI**.
+#### **A. How Attack Protection Works Autonomously (Zero Maintenance Overhead)**
+1. **Strong Typing & Structured Tool Contracts (No Shell Strings)**:
+   - FastMCP tools (`ansible_expand_fs`, `ansible_patch_fleet`, `ansible_pcs_node_standby`) accept strictly-typed JSON parameters (e.g. `size_gb: int`, `cluster_name: str`, `hostlist: str`).
+   - Attackers cannot pass raw shell injection payloads (`rm -rf /` or `; sudo ...`) into numerical or structured fields.
+2. **AAP Playbook Sandboxing**:
+   - The agent does not execute arbitrary Linux shell code directly. Every operation calls a fixed, pre-defined Ansible Playbook Template inside AAP (Ansible Automation Platform).
+   - Even if an attacker tries prompt injection, the LLM can only trigger safe, parameterized Ansible playbooks.
+3. **Single-Command Isolation**:
+   - `ansible_run_command` is explicitly restricted or excluded from Autonomous Subagents, ensuring autonomous execution is locked strictly to predefined operational playbooks.
 
-#### **B. Summary of Governance Matrix**
+#### **B. Summary of Operational Modes**
 
-| Tool Operation | Default `Enforced Mode` | `Autonomous Mode` | Policy Rationale |
-| :--- | :---: | :---: | :--- |
-| **`ansible_get_server_info` / Logs** | 🟢 Auto | 🟢 Auto | Read-only telemetry (zero risk). |
-| **`ansible_expand_fs`** | 🛑 HITL Required | 🟢 Auto | Automated volume remediation. |
-| **`ansible_pcs_node_standby`** | 🛑 HITL Required | 🟢 Auto | HA rolling maintenance wave. |
-| **`Limited Run Any Command`** | 🛑 **MANDATORY HITL** | 🛑 **MANDATORY HITL** | **Non-Bypassable**: Arbitrary shell commands always require human sign-off. |
-| **`PCS Cluster Stop`** | 🛑 **MANDATORY HITL** | 🛑 **MANDATORY HITL** | **Non-Bypassable**: Total service disruption protection. |
-| **`Reboot Host` / `Reboot Fleet`** | 🛑 **MANDATORY HITL** | 🛑 **MANDATORY HITL** | **Non-Bypassable**: Physical host restart safety. |
+| Mode | Behavior | Use Case |
+| :--- | :--- | :--- |
+| **`Enforced Mode` (Default)** | Every high-risk tool call generates a **`PENDING` HITL request card** in the Web UI, requiring human operator authorization (`GRANTED`) before execution. | High-security environments, critical production changes, manual sign-off policy. |
+| **`Autonomous Mode`** | Agent executes all authorized SOP tools, volume expansions, HA rolling updates, and patch workflows **autonomously to completion** with zero human intervention. All actions are logged to the PostgreSQL audit trail. | Automated overnight patching, event-driven auto-remediation, self-healing clusters. |
 
 ---
 
