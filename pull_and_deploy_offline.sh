@@ -87,8 +87,11 @@ http {
         ssl_certificate_key /etc/nginx/ssl/server.key;
         ssl_protocols TLSv1.2 TLSv1.3;
 
-        location / { proxy_pass http://deepagent_webui; }
-        location /v1/ { proxy_pass http://deepagent_api; }
+        location / { proxy_pass http://deepagent_webui:8000; }
+        location /v1/ {
+            rewrite ^/v1/(.*) /$1 break;
+            proxy_pass http://deepagent_api;
+        }
         location /mcp/ansible/ { rewrite ^/mcp/ansible/(.*) /$1 break; proxy_pass http://ansible_mcp; }
         location /mcp/sop/ { rewrite ^/mcp/sop/(.*) /$1 break; proxy_pass http://sop_mcp; }
     }
@@ -169,7 +172,7 @@ if [ ! -f "${SSL_DIR}/server.crt" ]; then
         -keyout "${SSL_DIR}/server.key" \
         -out "${SSL_DIR}/server.crt" \
         -subj "/CN=deepagent.local" >/dev/null 2>&1
-    chmod 600 "${SSL_DIR}/server.key"
+    chmod 644 "${SSL_DIR}/server.key" "${SSL_DIR}/server.crt"
 fi
 
 # 6. Clean Previous Containers
@@ -187,11 +190,11 @@ podman compose -f docker-compose.production.yml up -d
 echo -e "\n🔍 Executing Automated Health Probing..."
 for i in {1..15}; do
     echo -n "  ⏳ Probe ${i}/15 ... "
-    if curl -k -s -f https://localhost:8443/ >/dev/null 2>&1 || curl -s -f http://localhost:8642/v1/system/supervisor >/dev/null 2>&1; then
+    if curl -k -s -f https://localhost:8443/ >/dev/null 2>&1 && curl -k -s -f https://localhost:8443/v1/system/supervisor >/dev/null 2>&1; then
         echo "🟢 All Services Healthy!"
         break
     fi
-    sleep 3
+    sleep 2
 done
 
 echo -e "\n================================================================================"

@@ -30,7 +30,7 @@ declare -A FULL_IMAGES=(
     ["deepagent-sop-mcp"]="localhost/deepagent_sop-mcp:latest"
     ["deepagent-hitl-db"]="localhost/agent2_hitl-db:latest"
     ["deepagent-mock-aap"]="localhost/local-mock-aap:latest"
-    ["deepagent-hitl-web"]="localhost/agent2_hitl-web:latest"
+    ["deepagent-hitl-web"]="localhost/deepagent-hitl-web:latest"
     ["deepagent-proxy"]="localhost/deepagent-proxy:latest"
 )
 
