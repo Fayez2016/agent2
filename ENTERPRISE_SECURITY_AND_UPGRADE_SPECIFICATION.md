@@ -146,14 +146,14 @@ Sensitive credentials stored in PostgreSQL (`system_settings` and `mcp_servers`)
 
 All packages and base images are upgraded to the latest stable production versions:
 
-### **2.1 Production Base Images**
+### **2.1 Production Base Images (Up-to-Date Standard Images)**
 
-| Component | Current Base Image | Upgraded Production Base Image | Security Rationale |
+| Component | Standard Base Image | Target Latest Production Tag | Security & Performance Rationale |
 | :--- | :--- | :--- | :--- |
-| **Deep Agent Service** | `python:3.11-slim` | `registry.access.redhat.com/ubi9/python-311:latest` | Red Hat enterprise UBI9 certified, non-root, signed packages, zero high CVEs. |
-| **FastMCP Servers** | `python:3.11-slim` | `registry.access.redhat.com/ubi9/python-311:latest` | Enterprise base with built-in OpenSSL 3.x and Ansible core. |
-| **PostgreSQL DB** | `postgres:16-alpine` | `registry.access.redhat.com/rhel9/postgresql-16:latest` | Hardened enterprise PostgreSQL 16 engine with SCRAM-SHA-256 auth. |
-| **Web UI** | Static Nginx / Node | `registry.access.redhat.com/ubi9/nginx-124:latest` | Hardened, unprivileged Nginx reverse proxy. |
+| **Deep Agent Service** | `python` | `python:3.11-slim` (Latest Patch) | Minimal attack surface, zero unnecessary system packages, up-to-date Debian 12 security patches. |
+| **FastMCP Servers** | `python` | `python:3.11-slim` (Latest Patch) | Lightweight FastMCP runtime with updated OpenSSL and minimal binary dependencies. |
+| **PostgreSQL DB** | `postgres` | `postgres:16-alpine` (Latest Patch) | Lightweight, secure PostgreSQL 16 engine with automated security patches. |
+| **Web UI** | `nginx` | `nginx:alpine-slim` (Latest Patch) | Hardened, minimal unprivileged Nginx reverse proxy. |
 
 ---
 
