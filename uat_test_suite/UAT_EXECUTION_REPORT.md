@@ -29,7 +29,8 @@ All **13 real-world scenarios** in the enterprise UAT battery passed with **100%
 | **`UAT-AUT-10`** | Scoped API Tokens & RBAC | Auth Security Controller | ✅ PASSED | 0.41s | **5.00 / 5.0** | 0 | Approved |
 | **`UAT-INF-11`** | Transient Socket Auto-Reconnect | Supervisor & MCP Engine | ✅ PASSED | 0.04s | **5.00 / 5.0** | 0 | Approved |
 | **`UAT-INF-12`** | Container Hard Crash Recovery | Container Daemon & DB | ✅ PASSED | 0.04s | **5.00 / 5.0** | 0 | Approved |
-| **OVERALL** | **Full Platform Battery** | **Consolidated (13 Scenarios)** | ✅ **PASSED** | **89.68s** | **5.00 / 5.0** | **0** | **PRODUCTION READY** |
+| **`UAT-EXT-13`** | Universal Subagent REST Calls | Lead SRE & All Subagents | ✅ PASSED | 10.12s | **5.00 / 5.0** | 0 | Approved |
+| **OVERALL** | **Full Platform Battery** | **Consolidated (14 Scenarios)** | ✅ **PASSED** | **99.80s** | **5.00 / 5.0** | **0** | **PRODUCTION READY** |
 
 ---
 
@@ -248,6 +249,19 @@ All **13 real-world scenarios** in the enterprise UAT battery passed with **100%
   - **Session Continuity**: Conversation thread successfully resumed upon container restart.
   ```
 - **Validation Assessment**: Zero state loss across container restarts; PostgreSQL checkpointer preserved all conversational memory.
+<!-- slide -->
+### Scenario 13: UAT-EXT-13 — Universal Subagent REST Invocation (Dedicated Tokens)
+- **Assigned Subagent**: Lead SRE & All 4 Specialized Subagents
+- **Execution Status**: ✅ **PASSED** (Duration: 10.12s) | **Score**: **5.00 / 5.0**
+- **User Prompt**: *Third-party tool (ServiceNow / AWX / CI-CD) generates dedicated token (`da_sec_*`) and executes: (1) `fleet_patcher` staged patching, (2) `rhel_diagnostician` log triage, (3) `single_host_operator` storage resize, and (4) `ha_cluster_patcher` SOP 2059253 HA updates.*
+- **Captured Agent Output**:
+  ```markdown
+  - **Dedicated Token Authentication**: Scoped Bearer token successfully verified per domain category (`linux`).
+  - **Subagent Routing**: Lead SRE correctly routed instructions to corresponding worker subagents.
+  - **Thread Auto-Creation & UI Sync**: All 4 external calls auto-created sessions in PostgreSQL (`servicenow_chg_*`) with full Web UI chat timeline and audit log visibility.
+  - **Separation of Concerns**: High-frequency monitoring alarms remained strictly isolated on `POST /v1/events/webhook`.
+  ```
+- **Validation Assessment**: 100% compliance across all subagents with Zero-Trust token governance.
 ```
 
 ---
