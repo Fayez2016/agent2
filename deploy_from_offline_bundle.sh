@@ -98,7 +98,7 @@ echo "📊 Active Containers:"
 podman ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 echo -e "\n🩺 Probing Endpoints..."
-if curl -k -s -f https://localhost/ >/dev/null 2>&1; then
+if curl -k -s -f https://localhost:8443:8443/ >/dev/null 2>&1; then
     echo "  🟢 [200 OK] HTTPS Reverse Proxy (:443) -> Connected."
 else
     echo "  ⚠️ HTTPS Reverse Proxy probe pending..."
@@ -113,6 +113,6 @@ fi
 
 echo -e "\n================================================================================"
 echo " 🎉 OFFLINE PRODUCTION DEPLOYMENT COMPLETE & VERIFIED!"
-echo " 🔒 HTTPS Web UI Entry Point : https://localhost"
-echo " ⚡ Secure API Endpoint      : https://localhost/v1/"
+echo " 🔒 HTTPS Web UI Entry Point : https://localhost:8443"
+echo " ⚡ Secure API Endpoint      : https://localhost:8443:8443/v1/"
 echo "================================================================================"

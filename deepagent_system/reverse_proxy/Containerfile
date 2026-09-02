@@ -11,6 +11,6 @@ RUN chown -R 1001:0 /etc/nginx /var/log/nginx /var/lib/nginx && \
     chmod -R g+rwx /etc/nginx /var/log/nginx /var/lib/nginx
 
 USER 1001
-EXPOSE 80 443
+EXPOSE 8080 8443
 
 CMD ["nginx", "-g", "daemon off;"]
