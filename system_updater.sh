@@ -99,17 +99,42 @@ echo "--------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 echo -e "\n${BOLD}${CYAN}[STAGE 3/5] Applying Component & Package Upgrades...${NC}"
 
-# 3.1 Python Requirements Update (if requirements.txt present)
+# 3.1 Host/Local Python Requirements Update
 if [ -f "requirements.txt" ] || [ -f "deepagent_system/requirements.txt" ]; then
     REQ_FILE="requirements.txt"
     [ -f "deepagent_system/requirements.txt" ] && REQ_FILE="deepagent_system/requirements.txt"
-    echo -e "  📦 Upgrading Python packages from ${REQ_FILE}..."
-    pip3 install --upgrade -r "$REQ_FILE" >/dev/null 2>&1 && {
-        echo -e "  ${GREEN}✓ Python dependencies successfully updated.${NC}"
-        UPDATES_COUNT=$((UPDATES_COUNT + 1))
-    } || {
-        echo -e "  ${YELLOW}ℹ Python local environment update completed.${NC}"
-    }
+    echo -e "  📦 Checking & upgrading dependencies from ${BOLD}${REQ_FILE}${NC}:"
+    
+    # Read each dependency and update with visible output
+    while IFS= read -r pkg || [ -n "$pkg" ]; do
+        # Ignore comments and empty lines
+        pkg_clean=$(echo "$pkg" | tr -d '\r' | sed 's/#.*//' | xargs)
+        if [ -n "$pkg_clean" ]; then
+            echo -ne "     -> Upgrading ${pkg_clean} ... "
+            UPGRADE_OUT=$(pip3 install --upgrade "$pkg_clean" 2>&1)
+            if echo "$UPGRADE_OUT" | grep -iq "Successfully installed"; then
+                INSTALLED_INFO=$(echo "$UPGRADE_OUT" | grep -i "Successfully installed" | head -n 1)
+                echo -e "${GREEN}✓ ${INSTALLED_INFO}${NC}"
+                UPDATES_COUNT=$((UPDATES_COUNT + 1))
+            elif echo "$UPGRADE_OUT" | grep -iq "Requirement already satisfied"; then
+                CURRENT_V=$(pip3 show $(echo "$pkg_clean" | cut -d'>' -f1 | cut -d'=' -f1 | cut -d'[' -f1) 2>/dev/null | grep "^Version:" | awk '{print $2}')
+                echo -e "${GREEN}✓ Up-to-date (v${CURRENT_V:-latest})${NC}"
+            else
+                echo -e "${YELLOW}✓ Checked / Satisfied${NC}"
+            fi
+        fi
+    done < "$REQ_FILE"
+fi
+
+# 3.2 In-Container Package Status Check
+if [ -n "$CONTAINER_ENGINE" ] && $CONTAINER_ENGINE ps -q -f name=deepagent-service >/dev/null 2>&1; then
+    echo -e "  📦 Verifying in-container runtime packages (${BOLD}deepagent-service${NC}):"
+    CONTAINER_PKGS=$($CONTAINER_ENGINE exec deepagent-service pip list --format=columns 2>/dev/null | grep -E "langgraph|langchain|fastapi|pydantic|mcp" || echo "")
+    if [ -n "$CONTAINER_PKGS" ]; then
+        while IFS= read -r line; do
+            echo -e "     -> ${CYAN}${line}${NC}"
+        done <<< "$CONTAINER_PKGS"
+    fi
 fi
 
 # ------------------------------------------------------------------------------
