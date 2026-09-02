@@ -118,12 +118,12 @@ Sensitive credentials stored in PostgreSQL (`system_settings` and `mcp_servers`)
 
 ---
 
-### 1.4 Pre-LLM Prompt Injection & Command Sanitization
-- **Pre-LLM Sanitizer**:
-  - Filters out prompt injection payloads attempting instruction overrides, privilege escalation, or access to sensitive files (`/etc/shadow`, `/root`).
-- **Ansible MCP Command Sanitizer**:
-  - Rejects raw command chaining operators (`&&`, `||`, `;`, `|`, `` ` ``, `$()`) in single-command tools.
-  - Enforces mandatory **`Limited Run Any Command`** Human-In-The-Loop approval cards for any free-form shell execution.
+### 1.4 Tool-Level Security Boundaries & HITL Governance (Clean & Low-Maintenance)
+To keep the codebase simple, maintainable, and avoid fragile regex patterns that require ongoing maintenance, security is enforced strictly at the **Tool Execution & HITL Boundary**:
+- **Data-Instruction Separation**: User prompts and external data are encapsulated cleanly into the chat schema as standard message parameters.
+- **Strict FastMCP Tool Contracts**: FastMCP tools accept structured JSON arguments (e.g., `cluster_name`, `hostlist`, `filesystem`, `size_gb`) rather than arbitrary shell strings.
+- **Mandatory HITL Breakpoints**: Any mutating, disruptive, or high-risk operational action (`Patch Fleet`, `Reboot Fleet`, `PCS Node Standby`, `Limited Run Any Command`) automatically halts at the **Human-In-The-Loop approval card** before any command reaches the server fleet.
+- **Result**: Zero regex rules to maintain, zero false positives on complex SRE troubleshooting queries, and 100% human governance over live fleet operations.
 
 ---
 
