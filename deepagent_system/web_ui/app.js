@@ -1,7 +1,6 @@
 // LangGraph Deep Agent Dashboard Client
 // Strict Chronological Execution (Tools First, Final Response Last), Permanent HITL Cards & Incident Export
-const API_HOST = window.location.hostname || "localhost";
-const BASE_URL = `${window.location.protocol}//${API_HOST}:8642`;
+const BASE_URL = window.location.origin;
 const API_KEY = "hermes-api-secret";
 
 let currentThreadId = null;

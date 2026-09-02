@@ -196,16 +196,28 @@ done
 cd "${COMPOSE_DIR}"
 podman compose -f docker-compose.production.yml up -d
 
-# 8. Automated Health Probing
+# 8. Automated Health Probing & Diagnostic Verification
 echo -e "\n🔍 Executing Automated Health Probing..."
-for i in {1..15}; do
-    echo -n "  ⏳ Probe ${i}/15 ... "
-    if curl -k -s -f https://localhost:8443/ >/dev/null 2>&1 && curl -k -s -f https://localhost:8443/health >/dev/null 2>&1; then
-        echo "🟢 All Services Healthy!"
+ALL_HEALTHY=false
+for i in {1..20}; do
+    echo -n "  ⏳ Probe ${i}/20 ... "
+    if curl -k -s -f https://localhost:8443/ >/dev/null 2>&1 && \
+       curl -k -s -f https://localhost:8443/health >/dev/null 2>&1 && \
+       curl -k -s -X POST https://localhost:8443/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"adminpassword"}' | grep -q "token"; then
+        echo "🟢 All Services & Auth API Healthy!"
+        ALL_HEALTHY=true
         break
     fi
     sleep 2
 done
+
+if [ "${ALL_HEALTHY}" != "true" ]; then
+    echo -e "🔴 Health Check Failed! Diagnostic status:"
+    podman ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    exit 1
+fi
 
 echo -e "\n================================================================================"
 echo " 🎉 OFFLINE DEPLOYMENT COMPLETE & VERIFIED!"
