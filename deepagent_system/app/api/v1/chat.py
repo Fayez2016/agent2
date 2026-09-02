@@ -62,14 +62,14 @@ async def chat_completions(request: ChatCompletionRequest, authorization: Option
         raise HTTPException(status_code=401, detail="Unauthorized: Bearer token required")
     token = authorization.split(" ")[1]
 
-    # Validate against Scoped API Tokens or Master Key
+    # Validate against Scoped API Tokens, Active Web Sessions, or Master Key
     if token != settings.api_server_key:
         from app.infrastructure.db.auth_repository import AuthRepository
+        from app.api.v1.auth import _ACTIVE_SESSIONS
+        
         api_record = AuthRepository.validate_api_token(token)
-        if not api_record:
-            user = AuthRepository.validate_session(token)
-            if not user:
-                raise HTTPException(status_code=403, detail="Forbidden: Invalid or expired API token / session")
+        if not api_record and token not in _ACTIVE_SESSIONS:
+            raise HTTPException(status_code=403, detail="Forbidden: Invalid or expired API token / session")
 
     user_query = ""
     for msg in reversed(request.messages):
