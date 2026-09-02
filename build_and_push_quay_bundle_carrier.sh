@@ -28,9 +28,9 @@ fi
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
-# Copy tarball, checksum, and deploy script into container context
+# Copy tarball and create clean sha256
 cp "${TARBALL_SRC}" "${BUILD_DIR}/deepagent_full_images_dump.tar.gz"
-cp "${TARBALL_SRC}.sha256" "${BUILD_DIR}/deepagent_full_images_dump.tar.gz.sha256"
+(cd "${BUILD_DIR}" && sha256sum deepagent_full_images_dump.tar.gz > deepagent_full_images_dump.tar.gz.sha256)
 cp /home/fayez/agent2/deploy_from_offline_bundle.sh "${BUILD_DIR}/deploy_from_offline_bundle.sh"
 
 cat << 'CONTAINER_EOF' > "${BUILD_DIR}/Containerfile"
@@ -49,8 +49,8 @@ RUN chmod +x deploy_from_offline_bundle.sh
 CMD ["/bin/sh", "-c", "echo 'Deep Agent Offline Tarball Carrier. Run podman cp to extract tarball.'; ls -lh /opt/deepagent_offline"]
 CONTAINER_EOF
 
-echo "  🔨 Building carrier container image ..."
-podman build -t "localhost/deepagent-tarball:latest" "${BUILD_DIR}"
+echo "  🔨 Building carrier container image (no cache) ..."
+podman build --no-cache -t "localhost/deepagent-tarball:latest" "${BUILD_DIR}"
 
 echo -n "🔑 Authenticating with quay.io ... "
 echo "${QUAY_TOKEN}" | podman login -u "${QUAY_USER}" --password-stdin quay.io
@@ -70,15 +70,8 @@ echo "  ✓ [deepagent-tarball] Uploaded to Quay.io successfully."
 
 rm -rf "${BUILD_DIR}"
 
-echo -e "\n================================================================================"
+echo "================================================================================"
 echo " 🎉 OFFLINE TARBALL DUMP CONTAINER PUBLISHED TO QUAY.IO!"
 echo " 📦 Image Name: quay.io/souffm0a/deepagent-tarball:latest"
 echo " 📦 Image Tag : quay.io/souffm0a/deepagent-tarball:v1.2.0-${TIMESTAMP}"
-echo ""
-echo " 💡 How to Extract & Deploy on an Air-Gapped / Downstream Server:"
-echo "    1. podman pull quay.io/souffm0a/deepagent-tarball:latest"
-echo "    2. podman create --name temp-dump quay.io/souffm0a/deepagent-tarball:latest"
-echo "    3. podman cp temp-dump:/opt/deepagent_offline/ ."
-echo "    4. podman rm temp-dump"
-echo "    5. cd deepagent_offline && ./deploy_from_offline_bundle.sh ./deepagent_full_images_dump.tar.gz"
 echo "================================================================================"
