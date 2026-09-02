@@ -132,7 +132,7 @@ services:
       - POSTGRES_USER=hermes
       - POSTGRES_PASSWORD=secret456
       - POSTGRES_DB=hitl
-    volumes: [db-data:/var/lib/postgresql/data:Z]
+    volumes: [hitl-db-vol:/var/lib/postgresql/data:Z]
     networks: [deepagent_prod_net]
 
   ansible-mcp:
@@ -182,7 +182,7 @@ networks:
   deepagent_prod_net:
     driver: bridge
 volumes:
-  db-data:
+  hitl-db-vol:
 COMPOSE_EOF
 
 if [ ! -f "${SSL_DIR}/server.crt" ]; then
@@ -193,12 +193,13 @@ if [ ! -f "${SSL_DIR}/server.crt" ]; then
 fi
 chmod -R 777 "${SSL_DIR}"
 
-# 6. Stop & Clean Previous Containers if running
+# 6. Stop & Clean Previous Containers and stale volumes if running
 CONTAINERS=(deepagent-proxy deepagent-service deepagent-webui deepagent-ansible-mcp deepagent-sop-mcp deepagent-hitl-db deepagent-aap-server)
 for c in "${CONTAINERS[@]}"; do
     podman stop "${c}" 2>/dev/null || true
     podman rm -f "${c}" 2>/dev/null || true
 done
+podman volume rm -f deepagent_system_hitl-db-vol 2>/dev/null || true
 
 # 7. Start Stack via Podman Compose
 cd "${COMPOSE_DIR}"
@@ -209,11 +210,13 @@ echo -e "\n🔍 Executing Automated Health Probing & Authentication Diagnostic..
 ALL_HEALTHY=false
 for i in {1..20}; do
     echo -n "  ⏳ Probe ${i}/20 ... "
+    AUTH_RESP=$(curl -k -s -X POST https://localhost:8443/v1/auth/login \
+        -H "Content-Type: application/json" \
+        -d '{"username":"admin","password":"adminpassword"}' 2>/dev/null || true)
+    
     if curl -k -s -f https://localhost:8443/ >/dev/null 2>&1 && \
        curl -k -s -f https://localhost:8443/health >/dev/null 2>&1 && \
-       curl -k -s -X POST https://localhost:8443/v1/auth/login \
-            -H "Content-Type: application/json" \
-            -d '{"username":"admin","password":"adminpassword"}' | grep -q "token"; then
+       echo "${AUTH_RESP}" | grep -q "token"; then
         echo "🟢 All Services & Auth API Healthy!"
         ALL_HEALTHY=true
         break
