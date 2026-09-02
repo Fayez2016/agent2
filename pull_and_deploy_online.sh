@@ -88,8 +88,7 @@ http {
             proxy_set_header X-Forwarded-Proto https;
         }
         location /v1/ {
-            rewrite ^/v1/(.*) /$1 break;
-            proxy_pass http://deepagent_api;
+            proxy_pass http://deepagent_api/v1/;
             proxy_set_header Host $host;
             proxy_set_header X-Forwarded-Proto https;
         }
@@ -187,8 +186,8 @@ if [ ! -f "${SSL_DIR}/server.crt" ]; then
         -keyout "${SSL_DIR}/server.key" \
         -out "${SSL_DIR}/server.crt" \
         -subj "/CN=deepagent.local" >/dev/null 2>&1
-    chmod 644 "${SSL_DIR}/server.key" "${SSL_DIR}/server.crt"
 fi
+chmod -R 777 "${SSL_DIR}"
 
 # 5. Stop Previous Containers if running
 CONTAINERS=(deepagent-proxy deepagent-service deepagent-webui deepagent-ansible-mcp deepagent-sop-mcp deepagent-hitl-db deepagent-aap-server)

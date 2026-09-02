@@ -87,10 +87,15 @@ http {
         ssl_certificate_key /etc/nginx/ssl/server.key;
         ssl_protocols TLSv1.2 TLSv1.3;
 
-        location / { proxy_pass http://deepagent_webui:8000; }
+        location / {
+            proxy_pass http://deepagent_webui;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Proto https;
+        }
         location /v1/ {
-            rewrite ^/v1/(.*) /$1 break;
-            proxy_pass http://deepagent_api;
+            proxy_pass http://deepagent_api/v1/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Proto https;
         }
         location /mcp/ansible/ { rewrite ^/mcp/ansible/(.*) /$1 break; proxy_pass http://ansible_mcp; }
         location /mcp/sop/ { rewrite ^/mcp/sop/(.*) /$1 break; proxy_pass http://sop_mcp; }
@@ -172,8 +177,8 @@ if [ ! -f "${SSL_DIR}/server.crt" ]; then
         -keyout "${SSL_DIR}/server.key" \
         -out "${SSL_DIR}/server.crt" \
         -subj "/CN=deepagent.local" >/dev/null 2>&1
-    chmod 644 "${SSL_DIR}/server.key" "${SSL_DIR}/server.crt"
 fi
+chmod -R 777 "${SSL_DIR}"
 
 # 6. Clean Previous Containers
 CONTAINERS=(deepagent-proxy deepagent-service deepagent-webui deepagent-ansible-mcp deepagent-sop-mcp deepagent-hitl-db deepagent-aap-server)
