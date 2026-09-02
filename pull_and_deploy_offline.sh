@@ -93,7 +93,7 @@ http {
             proxy_set_header X-Forwarded-Proto https;
         }
         location /v1/ {
-            proxy_pass http://deepagent_api/v1/;
+            proxy_pass http://deepagent_api;
             proxy_set_header Host $host;
             proxy_set_header X-Forwarded-Proto https;
         }
