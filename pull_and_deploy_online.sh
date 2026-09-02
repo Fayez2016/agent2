@@ -206,7 +206,7 @@ cd "${COMPOSE_DIR}"
 podman compose -f docker-compose.production.yml up -d
 
 # 7. Automated Health Probing & Diagnostic Verification
-echo -e "\n🔍 Executing Automated Health Probing..."
+echo -e "\n🔍 Executing Automated Health Probing & Authentication Diagnostic..."
 ALL_HEALTHY=false
 for i in {1..20}; do
     echo -n "  ⏳ Probe ${i}/20 ... "

@@ -1,41 +1,22 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#  📦 SCRIPT 2: ONE-CLICK OFFLINE/CARRIER DEPLOYMENT (PULL CARRIER & RUN OFFLINE)
+#  🚀 SCRIPT 2: ONE-CLICK OFFLINE DEPLOYMENT (CARRIER CONTAINER & RUN)
 # ==============================================================================
-#  Usage:
-#    ./pull_and_deploy_offline.sh [optional_local_tarball_path]
-# ==============================================================================
-
 set -euo pipefail
 
 QUAY_USER="${QUAY_USER:-souffm0a}"
 QUAY_TOKEN="${QUAY_TOKEN:-kNC@4P_BAFnVf6!}"
 CARRIER_IMAGE="quay.io/${QUAY_USER}/deepagent-tarball:latest"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOCAL_TARBALL="${1:-}"
+EXTRACT_DIR="${SCRIPT_DIR}/bundle_extracted"
 
 echo "================================================================================"
-echo " 📦 DEEP AGENT OFFLINE/CARRIER DEPLOYMENT"
-echo " 📂 Deploy Root : ${SCRIPT_DIR}"
+echo " 🚀 DEEP AGENT OFFLINE DEPLOYMENT (CARRIER CONTAINER DUMP & RUN)"
+echo " 📦 Carrier Image : ${CARRIER_IMAGE}"
+echo " 📂 Deploy Root   : ${SCRIPT_DIR}"
 echo "================================================================================"
 
-# 1. Check if local tarball passed, otherwise pull carrier from Quay and extract
-if [ -n "${LOCAL_TARBALL}" ] && [ -f "${LOCAL_TARBALL}" ]; then
-    echo "  📄 Using provided local tarball: ${LOCAL_TARBALL}"
-    TARBALL_FILE="${LOCAL_TARBALL}"
-else
-    echo "⬇️ Pulling and extracting offline tarball carrier from Quay.io (${CARRIER_IMAGE}) ..."
-    if [ -n "${QUAY_TOKEN}" ]; then
-        echo "${QUAY_TOKEN}" | podman login -u "${QUAY_USER}" --password-stdin quay.io
-    fi
-    podman pull "${CARRIER_IMAGE}"
-    podman create --name temp-dump-carrier "${CARRIER_IMAGE}"
-    podman cp temp-dump-carrier:/opt/deepagent_offline/. "${SCRIPT_DIR}/"
-    podman rm temp-dump-carrier
-    TARBALL_FILE="${SCRIPT_DIR}/deepagent_full_images_dump.tar.gz"
-fi
-
-# 2. Configure rootless Podman storage if needed
+# 1. Rootless Podman storage configuration
 STORAGE_CONF="${HOME}/.config/containers/storage.conf"
 if [ ! -f "${STORAGE_CONF}" ]; then
     mkdir -p "$(dirname "${STORAGE_CONF}")"
@@ -48,15 +29,27 @@ ignore_chown_errors = "true"
 STOR_EOF
 fi
 
-# 3. Verify SHA-256 Checksum if file exists
-if [ -f "${TARBALL_FILE}.sha256" ]; then
-    echo -n "🔍 Verifying SHA-256 archive checksum ... "
-    cd "$(dirname "${TARBALL_FILE}")" && sha256sum -c "$(basename "${TARBALL_FILE}.sha256")"
+# 2. Login & Pull Carrier Image
+if [ -n "${QUAY_TOKEN}" ]; then
+    echo "${QUAY_TOKEN}" | podman login -u "${QUAY_USER}" --password-stdin quay.io
 fi
 
-# 4. Load Offline Images into Podman
-echo -e "\n📦 Loading container images into Podman store (100% Offline) ..."
-podman load -i "${TARBALL_FILE}"
+echo -e "\n⬇️ Pulling Offline Carrier Container ..."
+podman pull "${CARRIER_IMAGE}"
+
+# 3. Extract Airgap Bundle
+rm -rf "${EXTRACT_DIR}"
+mkdir -p "${EXTRACT_DIR}"
+echo -e "\n📦 Extracting Tarball and Assets from Carrier Container ..."
+podman run --rm -v "${EXTRACT_DIR}:/dump_out:Z" "${CARRIER_IMAGE}" cp -r /opt/deepagent_offline/. /dump_out/
+
+# 4. Verify SHA256 Checksum & Load Tarball
+cd "${EXTRACT_DIR}"
+echo -e "\n🔒 Verifying SHA256 Checksum ..."
+sha256sum -c deepagent_full_images_dump.tar.gz.sha256
+
+echo -e "\n📥 Loading Images into Podman Storage ..."
+podman load -i deepagent_full_images_dump.tar.gz
 
 # 5. Generate Configurations & TLS 1.3 Certificates
 COMPOSE_DIR="${SCRIPT_DIR}/deepagent_system"
@@ -72,6 +65,7 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
     sendfile on;
+
     upstream deepagent_api { server deepagent-service:8642; }
     upstream deepagent_webui { server deepagent-webui:3000; }
     upstream ansible_mcp { server deepagent-ansible-mcp:8000; }
@@ -102,8 +96,14 @@ http {
             proxy_set_header Host $host;
             proxy_set_header X-Forwarded-Proto https;
         }
-        location /mcp/ansible/ { rewrite ^/mcp/ansible/(.*) /$1 break; proxy_pass http://ansible_mcp; }
-        location /mcp/sop/ { rewrite ^/mcp/sop/(.*) /$1 break; proxy_pass http://sop_mcp; }
+        location /mcp/ansible/ {
+            rewrite ^/mcp/ansible/(.*) /$1 break;
+            proxy_pass http://ansible_mcp;
+        }
+        location /mcp/sop/ {
+            rewrite ^/mcp/sop/(.*) /$1 break;
+            proxy_pass http://sop_mcp;
+        }
     }
 }
 NGINX_EOF
@@ -114,62 +114,70 @@ services:
   proxy:
     image: quay.io/souffm0a/deepagent-proxy:latest
     container_name: deepagent-proxy
-    restart: always
+    restart: unless-stopped
     ports:
       - "8080:8080"
       - "8443:8443"
     volumes:
+      - ./reverse_proxy/nginx.conf:/etc/nginx/nginx.conf:ro,Z
       - ./reverse_proxy/ssl:/etc/nginx/ssl:ro,Z
     depends_on: [service, webui, ansible-mcp, sop-mcp]
     networks: [deepagent_prod_net]
+
   db:
     image: quay.io/souffm0a/deepagent-hitl-db:latest
     container_name: deepagent-hitl-db
-    restart: always
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=hermes
       - POSTGRES_PASSWORD=secret456
       - POSTGRES_DB=hitl
     volumes: [db-data:/var/lib/postgresql/data:Z]
     networks: [deepagent_prod_net]
+
   ansible-mcp:
     image: quay.io/souffm0a/deepagent-ansible-mcp:latest
     container_name: deepagent-ansible-mcp
-    restart: always
+    restart: unless-stopped
     environment:
       - AAP_HOST=aap-server:5000
       - AAP_TOKEN=mock-token
       - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
     depends_on: [db, aap-server]
     networks: [deepagent_prod_net]
+
   sop-mcp:
     image: quay.io/souffm0a/deepagent-sop-mcp:latest
     container_name: deepagent-sop-mcp
-    restart: always
+    restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
     depends_on: [db]
     networks: [deepagent_prod_net]
+
   service:
     image: quay.io/souffm0a/deepagent-core:latest
     container_name: deepagent-service
-    restart: always
+    restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
       - ANSIBLE_MCP_URL=http://ansible-mcp:8000/mcp
       - SOP_MCP_URL=http://sop-mcp:8001/mcp
     depends_on: [db, ansible-mcp, sop-mcp]
     networks: [deepagent_prod_net]
+
   webui:
     image: quay.io/souffm0a/deepagent-hitl-web:latest
     container_name: deepagent-webui
-    restart: always
+    restart: unless-stopped
     networks: [deepagent_prod_net]
+
   aap-server:
     image: quay.io/souffm0a/deepagent-mock-aap:latest
     container_name: deepagent-aap-server
-    restart: always
+    restart: unless-stopped
     networks: [deepagent_prod_net]
+
 networks:
   deepagent_prod_net:
     driver: bridge
@@ -197,7 +205,7 @@ cd "${COMPOSE_DIR}"
 podman compose -f docker-compose.production.yml up -d
 
 # 8. Automated Health Probing & Diagnostic Verification
-echo -e "\n🔍 Executing Automated Health Probing..."
+echo -e "\n🔍 Executing Automated Health Probing & Authentication Diagnostic..."
 ALL_HEALTHY=false
 for i in {1..20}; do
     echo -n "  ⏳ Probe ${i}/20 ... "
