@@ -111,8 +111,10 @@ if curl -s -f http://localhost:8642/v1/system/supervisor >/dev/null 2>&1; then
     echo "  🟢 [200 OK] PostgreSQL HITL Database (:5432) -> Connected."
 fi
 
-echo -e "\n================================================================================"
+echo "================================================================================"
 echo " 🎉 OFFLINE PRODUCTION DEPLOYMENT COMPLETE & VERIFIED!"
 echo " 🔒 HTTPS Web UI Entry Point : https://localhost:8443"
-echo " ⚡ Secure API Endpoint      : https://localhost:8443:8443/v1/"
+echo " ⚡ Secure API Endpoint      : https://localhost:8443/v1/"
+echo " ⚙️ Ansible MCP Endpoint     : https://localhost:8443/mcp/ansible/"
+echo " ⚙️ SOP MCP Endpoint         : https://localhost:8443/mcp/sop/"
 echo "================================================================================"
