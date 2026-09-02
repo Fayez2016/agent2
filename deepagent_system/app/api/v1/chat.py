@@ -83,8 +83,8 @@ async def chat_completions(request: ChatCompletionRequest, authorization: Option
     thread_id = request.thread_id
     if thread_id:
         try:
+            ThreadRepository.create_thread(thread_id, user_query[:35] + ("..." if len(user_query) > 35 else ""))
             ThreadRepository.add_message(thread_id=thread_id, role="user", content=user_query)
-            ThreadRepository.update_thread_title(thread_id=thread_id, title=user_query[:35] + ("..." if len(user_query) > 35 else ""))
         except Exception as e:
             logger.warning(f"Failed to persist user message for thread: {e}")
 
