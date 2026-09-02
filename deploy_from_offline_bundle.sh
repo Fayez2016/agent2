@@ -9,10 +9,12 @@
 set -euo pipefail
 
 TARBALL="${1:-/home/fayez/agent2/offline_releases/deepagent_full_images_dump_v1.2.0-20260902.tar.gz}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "================================================================================"
 echo " 🚀 DEEP AGENT PRODUCTION DEPLOYMENT (100% OFFLINE TARBALL)"
 echo " 📂 Tarball Archive : ${TARBALL}"
+echo " 📂 Deploy Root     : ${SCRIPT_DIR}"
 echo "================================================================================"
 
 if [ ! -f "${TARBALL}" ]; then
@@ -53,36 +55,60 @@ echo "✓ All container images loaded."
 
 # Step 4: Generate TLS Certificates for Reverse Proxy
 echo -e "\n🔐 Generating TLS Certificates for Reverse Proxy ..."
-mkdir -p /home/fayez/agent2/deepagent_system/reverse_proxy/ssl
-if [ ! -f "/home/fayez/agent2/deepagent_system/reverse_proxy/ssl/server.crt" ]; then
+SSL_DIR="${SCRIPT_DIR}/deepagent_system/reverse_proxy/ssl"
+mkdir -p "${SSL_DIR}"
+if [ ! -f "${SSL_DIR}/server.crt" ]; then
     openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-        -keyout /home/fayez/agent2/deepagent_system/reverse_proxy/ssl/server.key \
-        -out /home/fayez/agent2/deepagent_system/reverse_proxy/ssl/server.crt \
+        -keyout "${SSL_DIR}/server.key" \
+        -out "${SSL_DIR}/server.crt" \
         -subj "/C=US/ST=Enterprise/L=Datacenter/O=DeepAgent/OU=SRE/CN=deepagent.local" >/dev/null 2>&1
-    chmod 600 /home/fayez/agent2/deepagent_system/reverse_proxy/ssl/server.key
+    chmod 600 "${SSL_DIR}/server.key"
     echo "✓ Created SSL certificate and key."
 else
     echo "✓ SSL certificate already exists."
 fi
 
-# Step 5: Launch Stack via Podman Compose
+# Step 5: Clean up any old containers before start (Comprehensive Podman cleanup)
+echo -e "\n🧹 Ensuring clean container state ..."
+CONTAINERS=(
+    "deepagent-proxy"
+    "deepagent-service"
+    "deepagent-webui"
+    "deepagent-ansible-mcp"
+    "deepagent-sop-mcp"
+    "deepagent-hitl-db"
+    "deepagent-aap-server"
+)
+for c in "${CONTAINERS[@]}"; do
+    podman stop "${c}" 2>/dev/null || true
+    podman rm -f "${c}" 2>/dev/null || true
+done
+
+# Step 6: Launch Stack via Podman Compose
 echo -e "\n🚀 Starting Production Containers via docker-compose.production.yml ..."
-cd /home/fayez/agent2/deepagent_system
-podman-compose -f docker-compose.production.yml up -d 2>/dev/null || podman compose -f docker-compose.production.yml up -d
+COMPOSE_FILE="${SCRIPT_DIR}/deepagent_system/docker-compose.production.yml"
+cd "$(dirname "${COMPOSE_FILE}")"
+podman compose -f docker-compose.production.yml up -d
 
-# Step 6: Automated End-to-End Health Verification
+# Step 7: Automated End-to-End Health Verification
 echo -e "\n🔍 Executing Post-Deployment Health Verification..."
-sleep 5
+sleep 6
 
-if curl -k -s -f https://localhost/ >/dev/null 2>&1 || curl -s -f http://localhost:8642/v1/system/supervisor >/dev/null 2>&1; then
+echo "📊 Active Containers:"
+podman ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+echo -e "\n🩺 Probing Endpoints..."
+if curl -k -s -f https://localhost/ >/dev/null 2>&1; then
     echo "  🟢 [200 OK] HTTPS Reverse Proxy (:443) -> Connected."
+else
+    echo "  ⚠️ HTTPS Reverse Proxy probe pending..."
+fi
+
+if curl -s -f http://localhost:8642/v1/system/supervisor >/dev/null 2>&1; then
     echo "  🟢 [200 OK] Deep Agent Lead SRE Service (:8642) -> Healthy."
     echo "  🟢 [200 OK] Ansible FastMCP Tool Bridge (:8000) -> Ready."
     echo "  🟢 [200 OK] SOP FastMCP Cluster Patching (:8001) -> Ready."
     echo "  🟢 [200 OK] PostgreSQL HITL Database (:5432) -> Connected."
-else
-    echo "  ℹ️ Services started. Validating container states..."
-    podman ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 fi
 
 echo -e "\n================================================================================"
