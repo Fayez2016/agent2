@@ -57,13 +57,19 @@ def enrich_step_with_hitl(step: dict) -> dict:
 @router.post("/completions")
 async def chat_completions(request: ChatCompletionRequest, authorization: Optional[str] = Header(None)):
     """OpenAI-compatible Chat Completions endpoint streaming directly from LangGraph Deep Agent."""
-    # API key check
-    if settings.api_server_key:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        token = authorization.split(" ")[1]
-        if token != settings.api_server_key:
-            raise HTTPException(status_code=403, detail="Forbidden")
+    # Authenticate via Master Key, Session Token, or Scoped API Key (da_sec_*)
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized: Bearer token required")
+    token = authorization.split(" ")[1]
+
+    # Validate against Scoped API Tokens or Master Key
+    if token != settings.api_server_key:
+        from app.infrastructure.db.auth_repository import AuthRepository
+        api_record = AuthRepository.validate_api_token(token)
+        if not api_record:
+            user = AuthRepository.validate_session(token)
+            if not user:
+                raise HTTPException(status_code=403, detail="Forbidden: Invalid or expired API token / session")
 
     user_query = ""
     for msg in reversed(request.messages):

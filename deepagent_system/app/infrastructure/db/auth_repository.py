@@ -165,8 +165,11 @@ class AuthRepository:
                 return None
             
             # Check expiration
-            if token["expires_at"] and token["expires_at"] < datetime.now():
-                return None
+            if token["expires_at"]:
+                exp = token["expires_at"]
+                now = datetime.now(exp.tzinfo) if exp.tzinfo else datetime.now()
+                if exp < now:
+                    return None
             
             # Update last_used_at
             cursor.execute("""
