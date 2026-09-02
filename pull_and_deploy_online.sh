@@ -201,9 +201,11 @@ for c in "${CONTAINERS[@]}"; do
     podman rm "${c}" 2>/dev/null || true
 done
 
-# 6. Start Stack via Podman Compose
+# 6. Start Stack via Podman Compose (Persistent Daemon)
 cd "${COMPOSE_DIR}"
-podman compose -f docker-compose.production.yml up -d
+systemd-run --user --unit=deepagent-stack-online --remain-after-exit \
+  podman compose -f "${COMPOSE_DIR}/docker-compose.production.yml" up -d 2>/dev/null || \
+  podman compose -f docker-compose.production.yml up -d
 
 # 7. Automated Health Probing & Diagnostic Verification
 echo -e "\n🔍 Executing Automated Health Probing..."
