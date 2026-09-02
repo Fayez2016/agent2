@@ -2,9 +2,8 @@ FROM docker.io/library/postgres:16-alpine
 
 ENV POSTGRES_USER=hermes \
     POSTGRES_PASSWORD=secret456 \
-    POSTGRES_DB=hitl \
-    PGDATA=/var/lib/postgresql/data/pgdata
+    POSTGRES_DB=hitl
 
-COPY 01-schema-and-data.sql /docker-entrypoint-initdb.d/01-schema-and-data.sql
+COPY init.sql /docker-entrypoint-initdb.d/init.sql
 
 EXPOSE 5432
