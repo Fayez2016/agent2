@@ -1,0 +1,16 @@
+FROM registry.access.redhat.com/ubi9/nginx-122:latest
+LABEL maintainer="Deep Agent SRE Team"
+LABEL version="v1.2.0-tls-proxy"
+LABEL description="Hardened Enterprise TLS 1.3 Reverse Proxy for Deep Agent Platform"
+
+USER root
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY ssl/ /etc/nginx/ssl/
+
+RUN chown -R 1001:0 /etc/nginx /var/log/nginx /var/lib/nginx && \
+    chmod -R g+rwx /etc/nginx /var/log/nginx /var/lib/nginx
+
+USER 1001
+EXPOSE 80 443
+
+CMD ["nginx", "-g", "daemon off;"]
