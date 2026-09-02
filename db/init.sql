@@ -1,5 +1,11 @@
 -- Initialize HITL Database
--- Note: User and Database creation are handled by init_wrapper.sh or these commands if run as superuser
+DO $$
+BEGIN
+   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'hermes') THEN
+      CREATE ROLE hermes WITH SUPERUSER LOGIN PASSWORD 'secret456';
+   END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
