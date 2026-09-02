@@ -185,7 +185,7 @@ if [ ! -f "${SSL_DIR}/server.crt" ]; then
 fi
 chmod -R 777 "${SSL_DIR}"
 
-# 6. Clean Previous Containers
+# 6. Stop & Clean Previous Containers if running
 CONTAINERS=(deepagent-proxy deepagent-service deepagent-webui deepagent-ansible-mcp deepagent-sop-mcp deepagent-hitl-db deepagent-aap-server)
 for c in "${CONTAINERS[@]}"; do
     podman stop "${c}" 2>/dev/null || true

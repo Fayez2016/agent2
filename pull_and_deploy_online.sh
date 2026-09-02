@@ -194,11 +194,11 @@ if [ ! -f "${SSL_DIR}/server.crt" ]; then
 fi
 chmod -R 777 "${SSL_DIR}"
 
-# 5. Stop Previous Containers if running
+# 5. Stop & Clean Previous Containers if running
 CONTAINERS=(deepagent-proxy deepagent-service deepagent-webui deepagent-ansible-mcp deepagent-sop-mcp deepagent-hitl-db deepagent-aap-server)
 for c in "${CONTAINERS[@]}"; do
     podman stop "${c}" 2>/dev/null || true
-    podman rm "${c}" 2>/dev/null || true
+    podman rm -f "${c}" 2>/dev/null || true
 done
 
 # 6. Start Stack via Podman Compose (Persistent Daemon)
