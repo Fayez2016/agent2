@@ -6,4 +6,6 @@ __pycache__/
 .env
 push_to_github.sh
 logs/
+*.tar.gz
+deepagent-offline-carrier-bundle-*/
 

@@ -26,7 +26,7 @@ podman build -t "localhost/deepagent-proxy:latest" /home/fayez/agent2/deepagent_
 # 1. Map of Target Quay Repo -> EXACT Distinct Local Image
 declare -A FULL_IMAGES=(
     ["deepagent-core"]="localhost/deepagent-core:latest"
-    ["deepagent-ansible-mcp"]="localhost/local-ansible-mcp:v2"
+    ["deepagent-ansible-mcp"]="localhost/agent2_ansible-mcp:latest"
     ["deepagent-sop-mcp"]="localhost/deepagent_sop-mcp:latest"
     ["deepagent-hitl-db"]="localhost/agent2_hitl-db:latest"
     ["deepagent-mock-aap"]="localhost/local-mock-aap:latest"

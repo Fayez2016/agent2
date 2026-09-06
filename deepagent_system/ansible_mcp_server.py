@@ -152,7 +152,7 @@ def extract_debug_msg(stdout: str) -> Optional[str]:
     return None
 
 def find_job_template(template_name: str, headers: dict, aap_host: str) -> int:
-    protocol = "http" if "localhost" in aap_host or "aap-server" in aap_host else "https"
+    protocol = "http" if ("localhost" in aap_host or "127.0.0.1" in aap_host or "aap-server" in aap_host) else "https"
     url = f"{protocol}://{aap_host}/api/v2/job_templates"
     get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
     resp = requests.get(url, headers=get_headers, params={"name": template_name}, verify=False)
@@ -163,7 +163,7 @@ def find_job_template(template_name: str, headers: dict, aap_host: str) -> int:
     return results[0]["id"]
 
 def launch_job(template_id: int, extra_vars: dict, headers: dict, aap_host: str) -> int:
-    protocol = "http" if "localhost" in aap_host or "aap-server" in aap_host else "https"
+    protocol = "http" if ("localhost" in aap_host or "127.0.0.1" in aap_host or "aap-server" in aap_host) else "https"
     url = f"{protocol}://{aap_host}/api/v2/job_templates/{template_id}/launch/"
     payload = {"extra_vars": extra_vars}
     resp = requests.post(url, headers=headers, json=payload, verify=False)
@@ -171,7 +171,7 @@ def launch_job(template_id: int, extra_vars: dict, headers: dict, aap_host: str)
     return resp.json()["job"]
 
 def wait_for_completion(job_id: int, headers: dict, aap_host: str) -> str:
-    protocol = "http" if "localhost" in aap_host or "aap-server" in aap_host else "https"
+    protocol = "http" if ("localhost" in aap_host or "127.0.0.1" in aap_host or "aap-server" in aap_host) else "https"
     while True:
         url = f"{protocol}://{aap_host}/api/v2/jobs/{job_id}/"
         get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
@@ -183,7 +183,7 @@ def wait_for_completion(job_id: int, headers: dict, aap_host: str) -> str:
         time.sleep(2)
 
 def get_job_output(job_id: int, headers: dict, aap_host: str) -> str:
-    protocol = "http" if "localhost" in aap_host or "aap-server" in aap_host else "https"
+    protocol = "http" if ("localhost" in aap_host or "127.0.0.1" in aap_host or "aap-server" in aap_host) else "https"
     url = f"{protocol}://{aap_host}/api/v2/jobs/{job_id}/stdout/?format=txt"
     get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
     resp = requests.get(url, headers=get_headers, verify=False)

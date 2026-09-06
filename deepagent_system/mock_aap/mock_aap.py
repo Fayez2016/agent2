@@ -35,23 +35,31 @@ def extract_host_tokens(raw_str):
     return [t.strip() for t in re.split(r'[\s,;|]+', str(raw_str)) if t.strip()]
 
 def send_live_gmail_notification(recipient: str, subject: str, body: str) -> bool:
-    """Dispatches a real email to the operator Gmail inbox using TLS port 587."""
-    try:
-        msg = MIMEMultipart()
-        msg["From"] = f"Deep Agent SRE <{GMAIL_USER}>"
-        msg["To"] = recipient or GMAIL_USER
-        msg["Subject"] = subject or "[SRE Report] Deep Agent Execution Summary"
-        msg.attach(MIMEText(body, "plain"))
+    """Dispatches a real email to the operator Gmail inbox using TLS/SSL with retries."""
+    msg = MIMEMultipart()
+    msg["From"] = f"Deep Agent SRE <{GMAIL_USER}>"
+    msg["To"] = recipient or GMAIL_USER
+    msg["Subject"] = subject or "[SRE Report] Deep Agent Execution Summary"
+    msg.attach(MIMEText(body, "plain"))
 
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10.0) as server:
-            server.starttls()
-            server.login(GMAIL_USER, GMAIL_APP_PASS)
-            server.send_message(msg)
-            logger.info(f"✅ Real Gmail successfully dispatched to {recipient} via smtp.gmail.com:587")
-            return True
-    except Exception as e:
-        logger.error(f"❌ Failed to dispatch live Gmail to {recipient}: {e}")
-        return False
+    for attempt in range(1, 4):
+        for port in (587, 465):
+            try:
+                if port == 465:
+                    server = smtplib.SMTP_SSL("smtp.gmail.com", port, timeout=12.0)
+                else:
+                    server = smtplib.SMTP("smtp.gmail.com", port, timeout=12.0)
+                    server.starttls()
+                server.login(GMAIL_USER, GMAIL_APP_PASS)
+                server.send_message(msg)
+                server.quit()
+                logger.info(f"✅ Real Gmail successfully dispatched to {recipient} via smtp.gmail.com:{port} on attempt {attempt}")
+                return True
+            except Exception as e:
+                logger.warning(f"Attempt {attempt} via port {port} failed: {e}")
+        time.sleep(2)
+    logger.error(f"❌ Failed to dispatch live Gmail to {recipient} after all attempts.")
+    return False
 
 # 10 Clusters Dynamic Registry
 TOPOLOGY_CLUSTERS = [f"ha_cluster{i}" for i in range(1, 11)]
@@ -127,9 +135,25 @@ def launch_job(template_id):
         body = extra_vars.get('body', 'Deep Agent SRE Maintenance Completed Successfully.')
         send_live_gmail_notification(recipient, subj, body)
 
+    # Determine initial job status
+    raw_targets = extra_vars.get("hostlist") or extra_vars.get("hostname") or "localhost"
+    targets = extract_host_tokens(raw_targets)
+    job_status = "successful"
+    
+    # If explicit failure or hang or PCS failure
+    if template_id in [101, 102]:
+        if any(any(k in t.lower() for k in ["fail", "lock", "corosync_err", "err"]) and (t not in PCS_FIXED_HOSTS) for t in targets):
+            job_status = "failed"
+    elif template_id == 110: # Patch fleet
+        if any(any(k in t.lower() for k in ["err", "fail", "dnf", "pkg_fail", "cluster3_node1", "ha_cluster3_node1", "rhel-prod-04", "prod-04"]) for t in targets):
+            job_status = "failed"
+    elif template_id == 127: # Check online
+        if any(("hang" in t.lower() or "cluster7_node1" in t.lower() or "ha_cluster7_node1" in t.lower() or "rhel-prod-08" in t.lower() or "prod-08" in t.lower()) and (t not in CONSOLE_RECOVERED_HOSTS) for t in targets):
+            job_status = "failed"
+
     jobs[job_id] = {
         "id": job_id,
-        "status": "successful",
+        "status": job_status,
         "extra_vars": extra_vars,
         "template_id": template_id,
         "start_time": time.time(),
@@ -282,22 +306,42 @@ def get_job_stdout(job_id):
         lines = [f"PLAY [Fix PCS Cluster ({len(targets)} Nodes)] ************************************"]
         lines.append("TASK [Clear PCS Resource Failcounts & Re-enable Fencing] ***********************")
         for t in targets:
+            PCS_FIXED_HOSTS.add(t)
             lines.append(f"changed: [{t}] => {{ \"msg\": \"PCS resource failcounts cleared and fencing reintegrated.\", \"status\": \"healthy\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 8. Node Standby / Unstandby
+    # 8. Node Standby / Unstandby (Realistic Real-World Chaos & Edge-Cases)
     if template_id in [101, 102]:
         action_str = "Standby" if template_id == 101 else "Unstandby"
         lines = [f"PLAY [PCS Node {action_str} ({len(targets)} Nodes)] ********************************"]
         lines.append(f"TASK [Place Nodes in {action_str} State] ****************************************")
+        
+        has_failure = False
         for t in targets:
-            lines.append(f"changed: [{t}] => {{ \"node\": \"{t}\", \"state\": \"{action_str.lower()}\", \"resources_migrated\": true }}")
+            # 1. Deterministic explicit failure keyword
+            is_explicit_pcs_fail = any(k in t.lower() for k in ["fail", "lock", "corosync_err", "err"]) and (t not in PCS_FIXED_HOSTS)
+            # 2. Realistic 20% random transient migration or lockup failure unless already fixed
+            is_stochastic_fail = (random.random() < 0.20) and (t not in PCS_FIXED_HOSTS) and not any(k in t.lower() for k in ["ha_cluster_01", "node1", "node2"]) # Keep baseline UAT deterministic
+
+            if is_explicit_pcs_fail:
+                has_failure = True
+                lines.append(f"failed: [{t}] => {{ \"node\": \"{t}\", \"error\": \"PACEMAKER ERROR: Failed to migrate resource VIP_DB. Resource migration lockup or STONITH fencing delay on {t}.\", \"status\": \"unclean\" }}")
+            elif is_stochastic_fail and template_id == 101:
+                has_failure = True
+                lines.append(f"failed: [{t}] => {{ \"node\": \"{t}\", \"error\": \"COROSYNC WARNING: Standby transition timed out waiting for resource failover. Resource failcount exceeded on {t}. Run resource cleanup.\", \"status\": \"failed\" }}")
+            else:
+                PCS_FIXED_HOSTS.discard(t)
+                lines.append(f"changed: [{t}] => {{ \"node\": \"{t}\", \"state\": \"{action_str.lower()}\", \"resources_migrated\": true }}")
+                
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
-            lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
+            if has_failure:
+                lines.append(f"{t:30} : ok=1    changed=0    unreachable=0    failed=1")
+            else:
+                lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
     # 9. PCS Status Post-Check
@@ -305,7 +349,10 @@ def get_job_stdout(job_id):
         lines = [f"PLAY [PCS Status Post-Check ({len(targets)} Clusters)] **************************"]
         lines.append("TASK [Inspect Final Quorum & Balanced Resource Groups] *************************")
         for t in targets:
-            lines.append(f"ok: [{t}] => {{ \"cluster\": \"{t}\", \"quorum\": \"QUORATE (All members online)\", \"resource_groups\": \"Healthy & Balanced\" }}")
+            if any(f in t.lower() for f in ["fail", "split", "lock"]) and not (t in PCS_FIXED_HOSTS):
+                lines.append(f"failed: [{t}] => {{ \"cluster\": \"{t}\", \"quorum\": \"SPLIT-BRAIN / UNQUORATE\", \"error\": \"Corosync partitioned. Node unreachable in ring 0.\" }}")
+            else:
+                lines.append(f"ok: [{t}] => {{ \"cluster\": \"{t}\", \"quorum\": \"QUORATE (All members online)\", \"resource_groups\": \"Healthy & Balanced\" }}")
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=0    unreachable=0    failed=0")

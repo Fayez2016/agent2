@@ -89,25 +89,10 @@ http {
     keepalive_timeout 65;
     client_max_body_size 50M;
 
-    upstream deepagent_api {
-        server deepagent-service:8642;
-        keepalive 32;
-    }
-
-    upstream deepagent_webui {
-        server deepagent-webui:3000;
-        keepalive 16;
-    }
-
-    upstream ansible_mcp {
-        server deepagent-ansible-mcp:8000;
-        keepalive 16;
-    }
-
-    upstream sop_mcp {
-        server deepagent-sop-mcp:8001;
-        keepalive 16;
-    }
+    upstream deepagent_api { server 127.0.0.1:8642; }
+    upstream deepagent_webui { server 127.0.0.1:3000; }
+    upstream ansible_mcp { server 127.0.0.1:8000; }
+    upstream sop_mcp { server 127.0.0.1:8001; }
 
     server {
         listen 8080;
@@ -142,19 +127,23 @@ http {
         location /v1/ {
             proxy_pass http://deepagent_api;
             proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto https;
-            proxy_read_timeout 300s;
         }
 
         location /mcp/ansible/ {
             rewrite ^/mcp/ansible/(.*) /$1 break;
             proxy_pass http://ansible_mcp;
             proxy_http_version 1.1;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-Proto https;
@@ -164,6 +153,8 @@ http {
             rewrite ^/mcp/sop/(.*) /$1 break;
             proxy_pass http://sop_mcp;
             proxy_http_version 1.1;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-Proto https;
@@ -173,106 +164,6 @@ http {
 NGINX_EOF
 fi
 
-if [ ! -f "${COMPOSE_DIR}/docker-compose.production.yml" ]; then
-    echo "  📄 Writing embedded docker-compose.production.yml ..."
-    cat << 'COMPOSE_EOF' > "${COMPOSE_DIR}/docker-compose.production.yml"
-version: '3.8'
-
-services:
-  proxy:
-    image: quay.io/souffm0a/deepagent-proxy:latest
-    container_name: deepagent-proxy
-    restart: always
-    ports:
-      - "8080:8080"
-      - "8443:8443"
-    volumes:
-      - ./reverse_proxy/ssl:/etc/nginx/ssl:ro,Z
-    depends_on:
-      - service
-      - webui
-      - ansible-mcp
-      - sop-mcp
-    networks:
-      - deepagent_prod_net
-
-  db:
-    image: quay.io/souffm0a/deepagent-hitl-db:latest
-    container_name: deepagent-hitl-db
-    restart: always
-    environment:
-      - POSTGRES_USER=hermes
-      - POSTGRES_PASSWORD=secret456
-      - POSTGRES_DB=hitl
-    volumes:
-      - db-data:/var/lib/postgresql/data:Z
-    networks:
-      - deepagent_prod_net
-
-  ansible-mcp:
-    image: quay.io/souffm0a/deepagent-ansible-mcp:latest
-    container_name: deepagent-ansible-mcp
-    restart: always
-    environment:
-      - AAP_HOST=aap-server:5000
-      - AAP_TOKEN=mock-token
-      - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
-    depends_on:
-      - db
-      - aap-server
-    networks:
-      - deepagent_prod_net
-
-  sop-mcp:
-    image: quay.io/souffm0a/deepagent-sop-mcp:latest
-    container_name: deepagent-sop-mcp
-    restart: always
-    environment:
-      - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
-    depends_on:
-      - db
-    networks:
-      - deepagent_prod_net
-
-  service:
-    image: quay.io/souffm0a/deepagent-core:latest
-    container_name: deepagent-service
-    restart: always
-    environment:
-      - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
-      - ANSIBLE_MCP_URL=http://ansible-mcp:8000/mcp
-      - SOP_MCP_URL=http://sop-mcp:8001/mcp
-      - CUSTOM_OPENAI_BASE_URL=http://ollama:11434/v1
-      - CUSTOM_OPENAI_MODEL_NAME=deepagent
-    depends_on:
-      - db
-      - ansible-mcp
-      - sop-mcp
-    networks:
-      - deepagent_prod_net
-
-  webui:
-    image: quay.io/souffm0a/deepagent-hitl-web:latest
-    container_name: deepagent-webui
-    restart: always
-    networks:
-      - deepagent_prod_net
-
-  aap-server:
-    image: quay.io/souffm0a/deepagent-mock-aap:latest
-    container_name: deepagent-aap-server
-    restart: always
-    networks:
-      - deepagent_prod_net
-
-networks:
-  deepagent_prod_net:
-    driver: bridge
-
-volumes:
-  db-data:
-COMPOSE_EOF
-fi
 
 # Step 5: Generate TLS Certificates for Reverse Proxy
 echo -e "\n🔐 Generating TLS Certificates for Reverse Proxy ..."
@@ -303,15 +194,62 @@ for c in "${CONTAINERS[@]}"; do
     podman rm -f "${c}" 2>/dev/null || true
 done
 
-# Step 7: Launch Stack via Podman Compose
-echo -e "\n🚀 Starting Production Containers via docker-compose.production.yml ..."
-COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.production.yml"
-cd "$(dirname "${COMPOSE_FILE}")"
-podman compose -f docker-compose.production.yml up -d
+# Step 7: Launch Stack via Podman Pod (Eliminating rootless bridge DNS failure modes)
+POD_NAME="deepagent-prod-pod"
+echo -e "\n🚀 Starting Production Containers in Pod '${POD_NAME}' ..."
+
+podman pod rm -f "${POD_NAME}" 2>/dev/null || true
+
+podman pod create \
+    --name "${POD_NAME}" \
+    -p 8080:8080 \
+    -p 8443:8443 \
+    -p 8642:8642
+
+podman run -d --name deepagent-hitl-db --pod "${POD_NAME}" \
+    -e POSTGRES_USER=hermes \
+    -e POSTGRES_PASSWORD=secret456 \
+    -e POSTGRES_DB=hitl \
+    -v db-data:/var/lib/postgresql/data:Z \
+    ${REGISTRY}/deepagent-hitl-db:${TAG}
+
+podman run -d --name deepagent-aap-server --pod "${POD_NAME}" \
+    ${REGISTRY}/deepagent-mock-aap:${TAG}
+
+podman run -d --name deepagent-ansible-mcp --pod "${POD_NAME}" \
+    -e AAP_HOST=127.0.0.1:5000 \
+    -e AAP_TOKEN=mock-token \
+    -e DATABASE_URL=postgresql://hermes:secret456@127.0.0.1:5432/hitl \
+    ${REGISTRY}/deepagent-ansible-mcp:${TAG}
+
+podman run -d --name deepagent-sop-mcp --pod "${POD_NAME}" \
+    -e DATABASE_URL=postgresql://hermes:secret456@127.0.0.1:5432/hitl \
+    ${REGISTRY}/deepagent-sop-mcp:${TAG}
+
+OPENROUTER_KEY="${OPENROUTER_API_KEY:-${OPENAI_API_KEY:-}}"
+if [ -z "${OPENROUTER_KEY}" ]; then
+    echo "⚠️ Warning: Neither OPENROUTER_API_KEY nor OPENAI_API_KEY is set. Set in environment or .env."
+fi
+
+podman run -d --name deepagent-service --pod "${POD_NAME}" \
+    -e DATABASE_URL=postgresql://hermes:secret456@127.0.0.1:5432/hitl \
+    -e ANSIBLE_MCP_URL=http://127.0.0.1:8000/mcp \
+    -e SOP_MCP_URL=http://127.0.0.1:8001/mcp \
+    -e OPENROUTER_API_KEY="${OPENROUTER_KEY}" \
+    -e OPENAI_API_KEY="${OPENROUTER_KEY}" \
+    ${REGISTRY}/deepagent-core:${TAG}
+
+podman run -d --name deepagent-webui --pod "${POD_NAME}" \
+    ${REGISTRY}/deepagent-hitl-web:${TAG}
+
+podman run -d --name deepagent-proxy --pod "${POD_NAME}" \
+    -v "${PROXY_DIR}/nginx.conf:/etc/nginx/nginx.conf:ro,Z" \
+    -v "${SSL_DIR}:/etc/nginx/ssl:ro,Z" \
+    ${REGISTRY}/deepagent-proxy:${TAG}
 
 # Step 8: Automated Health Probing & Problem Detection Loop
 echo -e "\n🔍 Executing Automated Health Probing & Diagnostics..."
-MAX_RETRIES=15
+MAX_RETRIES=20
 RETRY_COUNT=0
 HEALTH_OK=false
 
@@ -320,7 +258,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     echo -n "  ⏳ Health Probe (Attempt ${RETRY_COUNT}/${MAX_RETRIES}) ... "
     
     # Check if proxy responds
-    if curl -k -s -f https://localhost:8443/ >/dev/null 2>&1 || curl -s -f http://localhost:8642/v1/system/supervisor >/dev/null 2>&1; then
+    if curl -k -s -f https://localhost:8443/ >/dev/null 2>&1 && curl -s -f http://localhost:8642/v1/system/supervisor >/dev/null 2>&1; then
         echo "🟢 All Services Responding Healthy!"
         HEALTH_OK=true
         break
@@ -331,7 +269,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 done
 
 echo -e "\n📊 Active Containers:"
-podman ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+podman ps --pod --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.PodName}}"
 
 if [ "${HEALTH_OK}" = false ]; then
     echo -e "\n⚠️ WARNING: Automated health probe timed out. Running diagnostic inspection:"

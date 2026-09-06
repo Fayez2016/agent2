@@ -52,6 +52,8 @@ services:
       - DATABASE_URL=postgresql://hermes:secret456@db:5432/hitl
       - ANSIBLE_MCP_URL=http://ansible-mcp:8000/mcp
       - SOP_MCP_URL=http://sop-mcp:8001/mcp
+    ports:
+      - "8642:8642"
     depends_on: [db, ansible-mcp, sop-mcp]
     networks: [deepagent_prod_net]
 

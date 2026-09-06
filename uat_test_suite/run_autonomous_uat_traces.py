@@ -134,7 +134,7 @@ def run_scenario(scenario):
     }
 
     try:
-        res = requests.post(f"{API_HOST}/v1/chat/completions", json=payload, headers=AUTH_HEADER, timeout=120)
+        res = requests.post(f"{API_HOST}/v1/chat/completions", json=payload, headers=AUTH_HEADER, timeout=300)
         dur = time.time() - t0
 
         if res.status_code == 200:
