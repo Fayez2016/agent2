@@ -209,6 +209,81 @@ REGISTRY="${SATELLITE_REGISTRY}" TAG="latest" ./deploy_from_quay.sh
 
 ---
 
+## 4. Alternative Procedure: Manual Podman Pull & Push to Satellite
+
+If Red Hat Satellite cannot directly access `quay.io` due to firewall rules, proxy inspection, or airgap policies, you can use a workstation or bastion host with Podman to pull the images and push them directly into Red Hat Satellite.
+
+### Prerequisites on Satellite for Direct Push
+1. Ensure the container repository is created on Satellite (without an upstream sync URL, or set as custom).
+2. Or create a generic product/repository using `hammer`:
+   ```bash
+   hammer repository create \
+     --name "deepagent-core" \
+     --product "DeepAgent" \
+     --content-type "docker" \
+     --organization "${ORGANIZATION}"
+   ```
+
+### Step 1: Login to Quay.io & Red Hat Satellite on your Workstation
+```bash
+# 1. Login to Quay.io
+echo "kNC@4P_BAFnVf6!" | podman login -u "souffm0a" --password-stdin quay.io
+
+# 2. Login to Red Hat Satellite Registry
+SATELLITE_HOST="satellite.corp.internal"  # Or your Satellite FQDN / IP
+podman login "${SATELLITE_HOST}"
+```
+
+### Step 2: Automated Pull, Tag, and Push Script
+Run this script on your workstation or bastion:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SATELLITE_HOST="satellite.corp.internal"
+ORGANIZATION="Your_Org_Name"       # e.g., "Default_Organization" or "Enterprise"
+PRODUCT="DeepAgent"
+TAG="latest"
+
+IMAGES=(
+  "deepagent-core"
+  "deepagent-ansible-mcp"
+  "deepagent-sop-mcp"
+  "deepagent-hitl-db"
+  "deepagent-mock-aap"
+  "deepagent-hitl-web"
+  "deepagent-proxy"
+)
+
+echo "================================================================================"
+echo " 🚀 PULLING FROM QUAY & PUSHING DIRECTLY TO RED HAT SATELLITE"
+echo " 🎯 Target Satellite : ${SATELLITE_HOST}"
+echo " 🏢 Organization     : ${ORGANIZATION}"
+echo "================================================================================"
+
+for img in "${IMAGES[@]}"; do
+  QUAY_IMG="quay.io/souffm0a/${img}:${TAG}"
+  # Satellite container registry naming convention for direct pushes:
+  # <satellite_fqdn>/<organization>-<product>-<repository>:<tag>
+  SAT_IMG="${SATELLITE_HOST}/${ORGANIZATION}-${PRODUCT}-${img}:${TAG}"
+
+  echo -e "\n⬇️  [1/3] Pulling ${QUAY_IMG} ..."
+  podman pull "${QUAY_IMG}"
+
+  echo "🏷️  [2/3] Tagging as ${SAT_IMG} ..."
+  podman tag "${QUAY_IMG}" "${SAT_IMG}"
+
+  echo "⬆️  [3/3] Pushing to Red Hat Satellite: ${SAT_IMG} ..."
+  podman push "${SAT_IMG}"
+  echo "✓ Successfully pushed ${img} to Satellite."
+done
+
+echo -e "\n🎉 ALL 7 MICROSERVICES PUSHED TO SATELLITE SUCCESSFULLY!"
+```
+
+---
+
 ## 6. Automated Periodic Sync Schedule (Cron / Sync Plan)
 To ensure that patches and new tags are mirrored automatically:
 
