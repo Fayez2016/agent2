@@ -1,0 +1,175 @@
+Subject: [Deep Agent] Safe GitLab Push Script (Plain Text Body)
+From: deepagent@aramco.com
+To: souffm0a@aramco.com
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+MIME-Version: 1.0
+
+Hello Fayez,
+
+Here is the full text of 'push_deepagent_assets_to_gitlab.sh' for synchronizing Deep Agent assets (playbooks with rescue blocks, skills, prompts, and schema) to your GitLab repository without overwriting existing files:
+
+================================================================================
+FILE: push_deepagent_assets_to_gitlab.sh
+PATH: /home/fayez/agent2/push_deepagent_assets_to_gitlab.sh
+SIZE: 6281 bytes
+================================================================================
+
+#!/usr/bin/env bash
+# ==============================================================================
+#  🚀 Deep Agent: Safe GitLab Asset Synchronizer & Pusher
+# ==============================================================================
+#  Pulls existing files from your GitLab repository first to guarantee no
+#  existing project assets or playbooks are overwritten or deleted.
+#
+#  Syncs only lightweight, frequently updated operational assets:
+#    - Ansible Playbooks (*.yml with block: / rescue: & VMware REST)
+#    - Declarative Markdown Skills & SOPs (*.md)
+#    - Subagent Prompts (prompts.py)
+#    - Database Schema & Seed Configs (init.sql)
+#
+#  Features:
+#    1. Clones/pulls GitLab repository first (preserves existing files/history).
+#    2. Copies updated Deep Agent assets into dedicated subdirectories.
+#    3. Strictly enforces size quotas (< 1 MB total, no images/tarballs).
+#    4. Non-destructive: Normal git commit & push (NEVER uses git push --force).
+# ==============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}"
+
+GITLAB_REPO="${1:-}"
+BRANCH="${2:-main}"
+
+if [ -z "${GITLAB_REPO}" ]; then
+    echo "❌ Usage: $0 <GITLAB_REPO_URL> [BRANCH]"
+    echo "   Example: $0 https://gitlab.corp.internal/sre/deepagent-playbooks.git main"
+    exit 1
+fi
+
+WORKSPACE_DIR="/tmp/deepagent_gitlab_sync_$(date +%s)"
+
+echo "================================================================================"
+echo " 🚀 SAFE SYNC OF DEEP AGENT ASSETS TO GITLAB"
+echo " 📡 Target Repo: ${GITLAB_REPO}"
+echo " 🌿 Branch     : ${BRANCH}"
+echo " 📂 Workspace  : ${WORKSPACE_DIR}"
+echo "================================================================================"
+
+cleanup() {
+    if [ -d "${WORKSPACE_DIR}" ]; then
+        rm -rf "${WORKSPACE_DIR}"
+    fi
+}
+trap cleanup EXIT
+
+# ------------------------------------------------------------------------------
+# Step 1: Pull existing GitLab repository first (avoid overwriting project)
+# ------------------------------------------------------------------------------
+echo "📥 Step 1/5: Pulling existing repository from GitLab ..."
+mkdir -p "${WORKSPACE_DIR}"
+
+REPO_EMPTY=0
+if git clone "${GITLAB_REPO}" "${WORKSPACE_DIR}" 2>/dev/null; then
+    echo "✓ Successfully cloned existing remote repository."
+    cd "${WORKSPACE_DIR}"
+    
+    # Check if target branch exists on remote, checkout or create it
+    if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+        git checkout "${BRANCH}"
+        git pull origin "${BRANCH}"
+    else
+        # If branch doesn't exist yet, create and switch to it
+        git checkout -b "${BRANCH}"
+    fi
+else
+    echo "ℹ️ Repository is empty or newly created. Initializing fresh working tree ..."
+    cd "${WORKSPACE_DIR}"
+    git init -b "${BRANCH}"
+    git remote add origin "${GITLAB_REPO}"
+    REPO_EMPTY=1
+fi
+
+# Configure git committer metadata for this commit
+git config user.name "Deep Agent SRE"
+git config user.email "deepagent@enterprise.local"
+
+# ------------------------------------------------------------------------------
+# Step 2: Merge / Update Ansible Playbooks (With Block / Rescue)
+# ------------------------------------------------------------------------------
+echo "📦 Step 2/5: Synchronizing Ansible Playbooks (Preserving existing files) ..."
+mkdir -p "${WORKSPACE_DIR}/ansible_playbooks"
+if [ -d "${SCRIPT_DIR}/deepagent_system/ansible_playbooks" ]; then
+    cp -r "${SCRIPT_DIR}/deepagent_system/ansible_playbooks/"*.yml "${WORKSPACE_DIR}/ansible_playbooks/"
+    echo "   ✓ Staged playbooks:"
+    ls -1 "${WORKSPACE_DIR}/ansible_playbooks" | sed 's/^/     - /'
+fi
+
+# ------------------------------------------------------------------------------
+# Step 3: Merge / Update Skills & Declarative SOPs
+# ------------------------------------------------------------------------------
+echo "📦 Step 3/5: Synchronizing Agent Skills & SOP Markdown files ..."
+mkdir -p "${WORKSPACE_DIR}/skills"
+if [ -d "${SCRIPT_DIR}/deepagent_system/skills" ]; then
+    cp -r "${SCRIPT_DIR}/deepagent_system/skills/"* "${WORKSPACE_DIR}/skills/"
+fi
+
+# ------------------------------------------------------------------------------
+# Step 4: Merge Prompts & Database Schema
+# ------------------------------------------------------------------------------
+echo "📦 Step 4/5: Synchronizing Subagent Prompts & Schema ..."
+mkdir -p "${WORKSPACE_DIR}/prompts"
+if [ -f "${SCRIPT_DIR}/deepagent_system/app/prompts.py" ]; then
+    cp "${SCRIPT_DIR}/deepagent_system/app/prompts.py" "${WORKSPACE_DIR}/prompts/prompts.py"
+fi
+
+mkdir -p "${WORKSPACE_DIR}/db"
+if [ -f "${SCRIPT_DIR}/db/01-schema-and-data.sql" ]; then
+    cp "${SCRIPT_DIR}/db/01-schema-and-data.sql" "${WORKSPACE_DIR}/db/init.sql"
+fi
+
+# Ensure strict .gitignore to guarantee size limits (< 1 MB)
+cat << 'IGN_EOF' > "${WORKSPACE_DIR}/.gitignore"
+# Binary & heavy image prevention
+*.tar
+*.tar.gz
+*.iso
+*.img
+db-data/
+*.log
+__pycache__/
+*.pyc
+.env*
+.hermes/
+IGN_EOF
+
+# ------------------------------------------------------------------------------
+# Step 5: Check Status, Commit, and Safe Push (Never Force Push)
+# ------------------------------------------------------------------------------
+echo "🚀 Step 5/5: Evaluating repository diff and pushing changes ..."
+cd "${WORKSPACE_DIR}"
+
+TOTAL_SIZE=$(du -sh "${WORKSPACE_DIR}" | cut -f1)
+echo "📊 Total Synced Asset Size: ${TOTAL_SIZE} (Repository Quota Compliant)"
+
+git add ansible_playbooks/ skills/ prompts/ db/ .gitignore
+
+if git diff --cached --quiet; then
+    echo "✓ No changes detected. Remote repository is already up to date with all assets."
+else
+    echo "📝 Committing updated assets ..."
+    git commit -m "feat(deepagent): update playbooks with rescue, skills, prompts, and schema ($(date '+%Y-%m-%d %H:%M'))"
+    
+    echo "📡 Pushing to ${GITLAB_REPO} on branch '${BRANCH}' (Safe non-destructive push) ..."
+    git push -u origin "${BRANCH}"
+    echo "✓ Successfully pushed updates to GitLab without overwriting existing files!"
+fi
+
+echo "================================================================================"
+echo " ✅ GITLAB SYNC COMPLETED SUCCESSFULLY"
+echo "================================================================================"
+
+
+================================================================================
+End of script content.

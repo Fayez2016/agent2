@@ -1,18 +1,31 @@
 ---
-# Production Ansible Playbook: Out-of-Band Hardware Console Power-On (IPMI / iLO / iDRAC)
-- name: Out-of-Band IPMI Power On for Unresponsive Node
+- name: Out-of-Band IPMI / BMC Hardware Chassis Power-On
   hosts: localhost
   gather_facts: false
+  vars:
+    bmc_user: "{{ ipmi_user | default('ADMIN') }}"
+    bmc_pass: "{{ ipmi_password | default('ADMIN') }}"
   tasks:
-    - name: Power On Host via IPMI
-      community.general.ipmi_power:
-        name: "{{ ipmi_host | default(hostname) }}"
-        user: "{{ ipmi_user | default('admin') }}"
-        password: "{{ ipmi_password | default('secret') }}"
-        state: on
-      register: ipmi_out
-      ignore_errors: true
+    - name: Execute IPMI Hardware Power Block
+      block:
+        - name: Dispatch IPMI Chassis Power On via IPMItool
+          ansible.builtin.command: >
+            ipmitool -I lanplus -H {{ item }} -U {{ bmc_user }} -P {{ bmc_pass }} chassis power on
+          loop: "{{ hostlist.split(',') }}"
+          register: ipmi_cmd
+          changed_when: "'Up/On' in ipmi_cmd.stdout or ipmi_cmd.rc == 0"
 
-    - name: Report Out-of-Band Power Status
-      ansible.builtin.debug:
-        msg: "Out-of-band console power-on issued for {{ hostname }}. Status: SUCCESSFUL."
+        - name: Report IPMI Power Success
+          ansible.builtin.debug:
+            msg: >
+              STATUS: SUCCESS.
+              Action: Chassis Power On (IPMI over LAN).
+              Target BMC Host(s): {{ hostlist }}.
+
+      rescue:
+        - name: Report IPMI Failure to Deep Agent
+          ansible.builtin.fail:
+            msg: >
+              STATUS: FAILED_IPMI.
+              Target BMC: {{ hostlist }}.
+              Error: {{ ipmi_cmd.stderr | default(ipmi_cmd.stdout | default('IPMI connection timed out or auth failed')) }}.

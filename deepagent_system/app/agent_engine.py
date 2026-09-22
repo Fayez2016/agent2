@@ -53,6 +53,7 @@ def get_llm_instance(provider: Optional[str] = None, model_name: Optional[str] =
             timeout=60,
         )
     elif eff_provider in ("custom_openai", "openai"):
+        import httpx
         api_key = HitlRepository.get_setting("custom_openai_api_key", "sk-custom-secret")
         base_url = HitlRepository.get_setting("custom_openai_base_url", "https://api.openai.com/v1")
         eff_model = model_name or HitlRepository.get_setting("custom_openai_model", "gpt-4o")
@@ -61,8 +62,10 @@ def get_llm_instance(provider: Optional[str] = None, model_name: Optional[str] =
             api_key=api_key,
             model=eff_model,
             temperature=temperature,
-            max_retries=5,
+            max_retries=3,
             timeout=60,
+            http_client=httpx.Client(verify=False),
+            http_async_client=httpx.AsyncClient(verify=False),
         )
     else:  # ollama / local
         host = HitlRepository.get_setting("ollama_host", settings.ollama_host)
@@ -137,43 +140,36 @@ async def get_agent(domain_key: str = "linux_sre", reload: bool = False):
 
     # Fallback to default Linux SRE subagents if first launch on fresh DB
     if not subagent_configs and domain_key == "linux_sre":
-        ha_tools = [t for t in tools if t.name.startswith("ansible_pcs") or t.name in ("ansible_patch_fleet", "ansible_reboot_fleet", "ansible_reboot_host", "ansible_send_email", "hitl_request_approval")]
-        fleet_tools = [t for t in tools if t.name in ("ansible_patch_fleet", "ansible_reboot_fleet", "ansible_reboot_host", "ansible_get_server_info", "ansible_send_email", "hitl_request_approval")]
-        diag_tools = [t for t in tools if t.name.startswith("ansible_pcs") or t.name in ("ansible_get_server_info", "hitl_request_approval")]
-        single_tools = [t for t in tools if t.name in ("ansible_install_package", "ansible_expand_fs", "ansible_reboot_host", "ansible_get_server_info", "hitl_request_approval")]
+        pcs_tools = [t for t in tools if t.name.startswith("ansible_pcs") or t.name in ("sop_get_procedure", "ansible_send_email", "ansible_fix_pcs", "hitl_request_approval")]
+        fleet_tools = [t for t in tools if t.name in ("ansible_patch_fleet", "ansible_reboot_fleet", "ansible_reboot_host", "ansible_check_host_online", "ansible_send_email", "hitl_request_approval")]
+        diag_tools = [t for t in tools if t.name in ("ansible_get_server_info", "ansible_check_host_online", "ansible_run_command", "ansible_expand_fs", "ansible_console_power_on", "ansible_vmware_reset", "ansible_install_package", "ansible_send_email", "hitl_request_approval")]
 
         subagent_configs = [
             {
-                "name": "ha_cluster_patcher",
-                "description": "Specialized subagent for Red Hat HA Pacemaker/Corosync cluster rolling updates per SOP 2059253.",
+                "name": "pcs_cluster_specialist",
+                "description": "Specialized subagent for Red Hat HA Pacemaker/Corosync cluster maintenance, quorum preservation, node standby/unstandby, and SOP 2059253 HA rolling updates.",
                 "system_prompt": load_ha_patcher_prompt(recipient_email=notification_email),
-                "tools": ha_tools,
+                "tools": pcs_tools,
                 "skills": ["/app/skills/"]
             },
             {
                 "name": "fleet_patcher",
-                "description": "Specialized subagent for enterprise fleet package updates, reboots, and IPMI console recoveries.",
+                "description": "Specialized subagent for enterprise fleet package updates, DNF security patching, managed reboots, and post-reboot verification.",
                 "system_prompt": load_fleet_patcher_prompt(recipient_email=notification_email),
                 "tools": fleet_tools,
                 "skills": ["/app/skills/"]
             },
             {
                 "name": "rhel_diagnostician",
-                "description": "Specialized subagent for cluster health pre-checks, node inspections, and triage.",
+                "description": "Specialized subagent for host telemetry, log inspection (journalctl), storage expansion (/var), out-of-band IPMI recovery, and ad-hoc troubleshooting commands.",
                 "system_prompt": load_diagnostics_prompt(),
                 "tools": diag_tools,
-                "skills": ["/app/skills/"]
-            },
-            {
-                "name": "single_host_operator",
-                "description": "Specialized subagent for ad-hoc single-server package installations, reboots, and volume expansions.",
-                "system_prompt": load_single_host_prompt(),
-                "tools": single_tools,
                 "skills": ["/app/skills/"]
             }
         ]
 
-    root_tools = [t for t in tools if t.name in ("ansible_get_server_info", "ansible_send_email", "sop_get_procedure")]
+    # Root Agent Fast-Path: Directly inspect facts without delegation hops
+    root_tools = [t for t in tools if t.name in ("ansible_get_server_info", "ansible_check_host_online", "ansible_send_email", "sop_get_procedure")]
 
     logger.info(f"Compiling Deep Agent harness for domain '{domain_key}'...")
     agent = create_deep_agent(

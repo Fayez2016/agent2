@@ -1,14 +1,29 @@
 ---
-# Production Ansible Playbook: Fix PCS Cluster and Reset Resource Failcounts
-- name: Clean Up Failed Cluster Resources
+- name: Remediate and Clean Up PCS Cluster Resource Failures
   hosts: "{{ hostname | default(inventory_hostname) }}"
   gather_facts: false
   tasks:
-    - name: Run PCS Resource Cleanup
-      ansible.builtin.command: pcs resource cleanup
-      register: cleanup_out
-      changed_when: cleanup_out.rc == 0
+    - name: Resource Cleanup Block
+      block:
+        - name: Execute PCS Resource Cleanup
+          ansible.builtin.command: pcs resource cleanup
+          register: cleanup_out
+          changed_when: cleanup_out.rc == 0
 
-    - name: Output Cluster Cleanup Status
-      ansible.builtin.debug:
-        msg: "Cluster resources cleaned up and failcounts reset on {{ inventory_hostname }}."
+        - name: Verify Cluster State After Cleanup
+          ansible.builtin.command: pcs status
+          register: post_cleanup_status
+          changed_when: false
+
+        - name: Report Remediation Success
+          ansible.builtin.debug:
+            msg: "STATUS: SUCCESS. PCS cleanup completed on {{ inventory_hostname }}. Cluster operational."
+
+      rescue:
+        - name: Report Cleanup Failure to Deep Agent
+          ansible.builtin.fail:
+            msg: >
+              STATUS: FAILED.
+              Host: {{ inventory_hostname }}.
+              Action: Fix PCS Cluster.
+              Error: {{ cleanup_out.stderr | default(cleanup_out.stdout | default('Unknown cleanup error')) }}.

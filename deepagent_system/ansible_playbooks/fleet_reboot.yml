@@ -1,17 +1,39 @@
 ---
-# Production Ansible Playbook: Fleet Managed Host Reboot
-- name: Managed System Reboot
-  hosts: "{{ hostlist | default(hostname | default('all')) }}"
+- name: Managed Enterprise Fleet Operating System Reboot
+  hosts: "{{ hostlist | default('all') }}"
   gather_facts: false
   tasks:
-    - name: Issue System Reboot
-      ansible.builtin.reboot:
-        reboot_timeout: "{{ reboot_timeout | default(300) }}"
-        pre_reboot_delay: 2
-        post_reboot_delay: 10
-        test_command: uptime
-      register: reboot_out
+    - name: Execute Managed Reboot Block
+      block:
+        - name: Issue Managed OS Reboot with Dynamic Reachability Timeout
+          ansible.builtin.reboot:
+            msg: "Deep Agent SRE: Managed kernel/system restart."
+            connect_timeout: 10
+            reboot_timeout: 300
+            pre_reboot_delay: 2
+            post_reboot_delay: 5
+            test_command: uptime
+          register: reboot_result
 
-    - name: Report Reboot Success
-      ansible.builtin.debug:
-        msg: "Host {{ inventory_hostname }} rebooted successfully. Elapsed: {{ reboot_out.elapsed | default(30) }} seconds."
+        - name: Verify Post-Boot Kernel Version
+          ansible.builtin.command: uname -r
+          register: post_kernel
+          changed_when: false
+
+        - name: Report Reboot Success
+          ansible.builtin.debug:
+            msg: >
+              STATUS: SUCCESS.
+              Host: {{ inventory_hostname }}.
+              Reboot Elapsed: {{ reboot_result.elapsed }} seconds.
+              Active Running Kernel: {{ post_kernel.stdout }}.
+
+      rescue:
+        - name: Report Reboot Hang / Timeout to Deep Agent
+          ansible.builtin.fail:
+            msg: >
+              STATUS: FAILED_REBOOT_TIMEOUT.
+              Host: {{ inventory_hostname }}.
+              Action: Managed Reboot.
+              Error: Server did not return online within 300s window.
+              Recommended Action: Trigger Console Power On (IPMI) or VMware VM Reset.

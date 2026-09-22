@@ -87,14 +87,27 @@ with open(tar_path, 'rb') as f:
     file_name = os.path.basename(tar_path)
     msg.add_attachment(file_data, maintype='application', subtype='gzip', filename=file_name)
 
-# If system mailer is available or local sendmail:
+# Attempt dispatch via Resend SMTP or local relay
 sent = False
+resend_key = os.environ.get("RESEND_API_KEY", "")
+
 try:
-    with smtplib.SMTP('localhost', 25, timeout=5) as s:
+    msg['From'] = "Deep Agent SRE <onboarding@resend.dev>"
+    with smtplib.SMTP('smtp.resend.com', 587, timeout=20) as s:
+        s.starttls()
+        s.login('resend', resend_key)
         s.send_message(msg)
         sent = True
-except Exception:
+except Exception as e:
     pass
+
+if not sent:
+    try:
+        with smtplib.SMTP('localhost', 25, timeout=5) as s:
+            s.send_message(msg)
+            sent = True
+    except Exception:
+        pass
 
 if not sent:
     # Save formatted email bundle to outbox

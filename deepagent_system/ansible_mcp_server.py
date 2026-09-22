@@ -5,7 +5,7 @@ import urllib3
 import time
 import re
 import psycopg2
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from mcp.server.fastmcp import FastMCP
 
 # Suppress SSL warnings
@@ -49,7 +49,29 @@ def hitl_request_approval(action_summary: str, action_name: str) -> str:
     You MUST call this before any tool marked as high-risk.
     """
     logger.warning(f"HITL REQUIRED: {action_summary} (Action: {action_name})")
-    
+
+    # If system is in autonomous mode, auto-approve immediately
+    if get_hitl_mode() == "autonomous":
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO hitl_requests (action_summary, action_name, status, requested_at, resolved_at) VALUES (%s, %s, 'GRANTED', NOW(), NOW()) RETURNING id",
+                (action_summary, action_name)
+            )
+            req_id = cur.fetchone()[0]
+            conn.commit()
+            logger.info(f"Autonomous Mode: Auto-approved HITL request #{req_id} for '{action_name}'.")
+            return json.dumps({
+                "status": "successful",
+                "approval": "GRANTED",
+                "request_id": req_id,
+                "message": "Approval granted (Autonomous Mode)"
+            })
+        finally:
+            cur.close()
+            conn.close()
+
     conn = get_db_connection()
     cur = conn.cursor()
     try:
@@ -107,17 +129,24 @@ def get_hitl_mode() -> str:
     return "enforced"
 
 def check_approval(action_name: str) -> Optional[int]:
-    """Verifies if an unconsumed GRANTED approval exists specifically for this action."""
+    """Verifies if an unconsumed GRANTED approval exists specifically for this action (supports aliases)."""
     conn = get_db_connection()
     cur = conn.cursor()
+    names = [action_name]
+    if action_name == "Limited Run Any Command":
+        names.extend(["ansible_run_command", "Run Command", "Emergency Shell Command"])
+    elif action_name == "ansible_run_command":
+        names.append("Limited Run Any Command")
+    elif action_name in ["Reboot Host", "Reboot Fleet"]:
+        names.extend(["Reboot Host", "Reboot Fleet", "Fleet Reboot", "ansible_reboot_host", "ansible_reboot_fleet"])
     try:
         cur.execute(
             """SELECT id FROM hitl_requests 
                WHERE status = 'GRANTED'
-               AND action_name = %s
+               AND action_name = ANY(%s)
                AND resolved_at > NOW() - INTERVAL '5 minutes'
                ORDER BY resolved_at DESC LIMIT 1""",
-            (action_name,)
+            (names,)
         )
         result = cur.fetchone()
         return result[0] if result else None
@@ -151,29 +180,125 @@ def extract_debug_msg(stdout: str) -> Optional[str]:
         pass
     return None
 
-def find_job_template(template_name: str, headers: dict, aap_host: str) -> int:
-    protocol = "http" if ("localhost" in aap_host or "127.0.0.1" in aap_host or "aap-server" in aap_host) else "https"
-    url = f"{protocol}://{aap_host}/api/v2/job_templates"
+TEMPLATE_ALIASES = {
+    "Get Server Info": ["Get Server Info", "Check Host Online", "Server Info", "check_host_online", "get_server_info"],
+    "Check Host Online": ["Check Host Online", "Get Server Info", "check_host_online"],
+    "Reboot Host": ["Reboot Host", "Fleet Reboot", "Managed Reboot", "reboot_host", "fleet_reboot"],
+    "Reboot Fleet": ["Reboot Fleet", "Fleet Reboot", "fleet_reboot", "reboot_fleet"],
+    "Patch Fleet": ["Patch Fleet", "Fleet Patching", "fleet_patching", "patch_fleet"],
+    "PCS Health Check": ["PCS Health Check", "HA Cluster Health Check", "ha_cluster_health_check", "pcs_cluster_health_check", "pcs_health_check"],
+    "PCS Status": ["PCS Status", "HA Cluster Health Check", "pcs_status", "pcs_health_check"],
+    "PCS Node Standby": ["PCS Node Standby", "HA Cluster Node Standby", "ha_cluster_node_standby", "pcs_node_standby"],
+    "PCS Node Unstandby": ["PCS Node Unstandby", "HA Cluster Node Unstandby", "ha_cluster_node_unstandby", "pcs_node_unstandby"],
+    "Fix PCS Cluster": ["Fix PCS Cluster", "PCS Fix Cluster", "pcs_fix_cluster"],
+    "Console Power On": ["Console Power On", "Console Power On IPMI", "console_power_on_ipmi", "IPMI Power On", "IPMI Chassis Power", "ipmi_power_on", "ipmi"],
+    "Limited Run Any Command": ["Limited Run Any Command", "Run Command", "Emergency Shell Command", "run_shell_command", "run_command"],
+    "Expand Filesystem": ["Expand Filesystem", "Expand FS", "expand_filesystem"],
+    "HA Rolling Update": ["HA Rolling Update", "ha_cluster_rolling_update", "rolling_update"],
+    "Send Email Notification": ["Send Email Notification", "send_email_notification", "send_email"],
+    "VMware VM Reset": ["VMware VM Reset", "vmware_vm_reset"]
+}
+
+def normalize_name(s: str) -> str:
+    """Normalizes names by stripping non-alphanumerics and converting to lowercase."""
+    return re.sub(r'[^a-z0-9]', '', str(s).lower())
+
+def get_aap_api_base(aap_host: str, headers: dict) -> str:
+    """Detects whether AAP uses the new /api/controller/v2/ (AAP 2.4/2.5/2.6) or legacy /api/v2/."""
+    clean_host = aap_host.replace("https://", "").replace("http://", "").strip().rstrip("/")
+    protocol = "http" if ("localhost" in clean_host or "127.0.0.1" in clean_host or "aap-server" in clean_host) else "https"
+    
+    controller_base = f"{protocol}://{clean_host}/api/controller/v2"
+    legacy_base = f"{protocol}://{clean_host}/api/v2"
+    
     get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
-    resp = requests.get(url, headers=get_headers, params={"name": template_name}, verify=False)
-    resp.raise_for_status()
-    results = resp.json().get("results", [])
-    if not results:
-        raise ValueError(f"Template '{template_name}' not found.")
-    return results[0]["id"]
+    try:
+        r = requests.get(f"{controller_base}/ping/", headers=get_headers, timeout=3, verify=False)
+        if r.status_code in [200, 401, 403]:
+            return controller_base
+    except Exception:
+        pass
 
-def launch_job(template_id: int, extra_vars: dict, headers: dict, aap_host: str) -> int:
-    protocol = "http" if ("localhost" in aap_host or "127.0.0.1" in aap_host or "aap-server" in aap_host) else "https"
-    url = f"{protocol}://{aap_host}/api/v2/job_templates/{template_id}/launch/"
+    try:
+        r = requests.get(f"{controller_base}/job_templates/", headers=get_headers, timeout=3, verify=False)
+        if r.status_code in [200, 401, 403]:
+            return controller_base
+    except Exception:
+        pass
+
+    return legacy_base
+
+def find_job_template(template_name: str, headers: dict, aap_host: str, api_base: Optional[str] = None) -> Tuple[int, str]:
+    get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
+    if not api_base:
+        api_base = get_aap_api_base(aap_host, headers)
+
+    candidates = list(TEMPLATE_ALIASES.get(template_name, [template_name]))
+    if template_name not in candidates:
+        candidates.insert(0, template_name)
+
+    norm_candidates = {normalize_name(c) for c in candidates}
+
+    endpoints = [api_base]
+    alt_base = api_base.replace("/api/controller/v2", "/api/v2") if "/controller" in api_base else api_base.replace("/api/v2", "/api/controller/v2")
+    if alt_base not in endpoints:
+        endpoints.append(alt_base)
+
+    for base in endpoints:
+        # 1. Fast path: Direct query with trailing slash
+        for cand in candidates:
+            try:
+                url = f"{base}/job_templates/"
+                resp = requests.get(url, headers=get_headers, params={"name": cand}, verify=False, timeout=5)
+                if resp.status_code == 200:
+                    results = resp.json().get("results", [])
+                    if results:
+                        logger.info(f"Resolved '{template_name}' to AAP Job Template '{results[0]['name']}' (ID {results[0]['id']}) via {base}")
+                        return results[0]["id"], base
+                elif resp.status_code >= 400:
+                    logger.warning(f"AAP template query for '{cand}' returned {resp.status_code}: {resp.text}")
+            except Exception as e:
+                logger.warning(f"Error querying template '{cand}' on {base}: {e}")
+
+        # 2. Resilient path: Fetch template list and match via normalized fuzzy lookup
+        try:
+            url = f"{base}/job_templates/"
+            resp = requests.get(url, headers=get_headers, params={"page_size": 200}, verify=False, timeout=8)
+            if resp.status_code == 200:
+                all_templates = resp.json().get("results", [])
+                for item in all_templates:
+                    item_name = item.get("name", "")
+                    norm_item = normalize_name(item_name)
+                    # Match exact normalized or substring (e.g. '03 - Fleet Reboot' matches 'fleetreboot')
+                    if norm_item in norm_candidates or any(c in norm_item or norm_item in c for c in norm_candidates):
+                        logger.info(f"Fuzzy-matched '{template_name}' to AAP Job Template '{item_name}' (ID {item['id']}) via {base}")
+                        return item["id"], base
+
+                discovered = [t.get("name") for t in all_templates[:25]]
+                logger.info(f"AAP available templates on {base} ({len(all_templates)} total): {discovered}")
+            elif resp.status_code >= 400:
+                logger.warning(f"AAP template catalog query returned {resp.status_code}: {resp.text}")
+        except Exception as e:
+            logger.warning(f"Error fetching template catalog on {base}: {e}")
+
+    raise ValueError(f"Template '{template_name}' (aliases: {candidates}) not found on AAP ({api_base}).")
+
+def launch_job(template_id: int, extra_vars: dict, headers: dict, api_base: str) -> int:
+    url = f"{api_base}/job_templates/{template_id}/launch/"
     payload = {"extra_vars": extra_vars}
-    resp = requests.post(url, headers=headers, json=payload, verify=False)
+    resp = requests.post(url, headers=headers, json=payload, verify=False, timeout=15)
+    if resp.status_code >= 400:
+        raise RuntimeError(f"AAP Job Launch Failed ({resp.status_code}) on {url}: {resp.text}")
     resp.raise_for_status()
-    return resp.json()["job"]
+    data = resp.json()
+    job_id = data.get("id") or data.get("job")
+    if not job_id:
+        raise ValueError(f"No job ID returned in AAP launch response: {data}")
+    return int(job_id)
 
-def wait_for_completion(job_id: int, headers: dict, aap_host: str) -> str:
-    protocol = "http" if ("localhost" in aap_host or "127.0.0.1" in aap_host or "aap-server" in aap_host) else "https"
+def wait_for_completion(job_id: int, headers: dict, api_base: str) -> str:
     while True:
-        url = f"{protocol}://{aap_host}/api/v2/jobs/{job_id}/"
+        url = f"{api_base}/jobs/{job_id}/"
         get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
         resp = requests.get(url, headers=get_headers, verify=False)
         resp.raise_for_status()
@@ -182,9 +307,8 @@ def wait_for_completion(job_id: int, headers: dict, aap_host: str) -> str:
             return status
         time.sleep(2)
 
-def get_job_output(job_id: int, headers: dict, aap_host: str) -> str:
-    protocol = "http" if ("localhost" in aap_host or "127.0.0.1" in aap_host or "aap-server" in aap_host) else "https"
-    url = f"{protocol}://{aap_host}/api/v2/jobs/{job_id}/stdout/?format=txt"
+def get_job_output(job_id: int, headers: dict, api_base: str) -> str:
+    url = f"{api_base}/jobs/{job_id}/stdout/?format=txt"
     get_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
     resp = requests.get(url, headers=get_headers, verify=False)
     resp.raise_for_status()
@@ -257,10 +381,10 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any], is_hig
     }
 
     try:
-        template_id = find_job_template(template_name, headers, aap_host)
-        job_id = launch_job(template_id, extra_vars, headers, aap_host)
-        status = wait_for_completion(job_id, headers, aap_host)
-        stdout = get_job_output(job_id, headers, aap_host)
+        template_id, api_base = find_job_template(template_name, headers, aap_host)
+        job_id = launch_job(template_id, extra_vars, headers, api_base)
+        status = wait_for_completion(job_id, headers, api_base)
+        stdout = get_job_output(job_id, headers, api_base)
         
         clean_msg = extract_debug_msg(stdout)
         final_output = f"Result: {clean_msg}\n\nFull Output:\n{stdout}" if clean_msg else stdout
@@ -416,7 +540,7 @@ def ansible_console_power_on(hostlist: str) -> str:
 def ansible_run_command(command: str, hostname: str) -> str:
     """Executes a shell command on a remote host via Ansible AAP. 
     High-risk maintenance tool requiring human approval gate."""
-    return run_ansible_job_logic("Limited Run Any Command", {"hostlist": hostname, "agent_comand": command}, is_high_risk=True)
+    return run_ansible_job_logic("Limited Run Any Command", {"hostlist": hostname, "command": command, "agent_comand": command}, is_high_risk=True)
 
 if __name__ == "__main__":
     mcp.settings.host = "0.0.0.0"

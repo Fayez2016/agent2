@@ -1,0 +1,20 @@
+---
+- name: Execute Shell Command on Remote Host
+  hosts: "{{ hostlist }}"
+  gather_facts: false
+  tasks:
+    - name: Run Command Block
+      block:
+        - name: Run Shell Command
+          ansible.builtin.shell: "{{ command }}"
+          register: cmd_out
+          changed_when: false
+
+        - name: Report Command Output
+          ansible.builtin.debug:
+            msg: "{{ cmd_out.stdout }}"
+
+      rescue:
+        - name: Report Command Failure
+          ansible.builtin.fail:
+            msg: "FAILED: {{ cmd_out.stderr | default(cmd_out.msg | default('Execution failed')) }}"

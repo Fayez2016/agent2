@@ -30,17 +30,35 @@ def main():
 
     args = parser.parse_args()
 
+def sanitize_content(text: str) -> str:
+    """Sanitizes email content to ensure corporate privacy."""
+    if not text:
+        return ""
+    import re
+    s = re.sub(r'(?i)aramco\.com', 'enterprise.local', text)
+    s = re.sub(r'(?i)aramco', 'enterprise', s)
+    s = re.sub(r'\bps[0-9]{5,7}\b', 'rhel-node01', s)
+    s = re.sub(r'\bcs-popcorn\b', 'node-primary', s)
+    s = re.sub(r'\bsouffm0a\b', 'operator', s)
+    s = re.sub(r'\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '10.x.x.x', s)
+    s = re.sub(r'\b172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}\b', '172.x.x.x', s)
+    s = re.sub(r'\b192\.168\.\d{1,3}\.\d{1,3}\b', '192.168.x.x', s)
+    return s
+
     # Determine body content
     body_content = args.body
     if os.path.isfile(args.body):
         with open(args.body, "r", encoding="utf-8", errors="ignore") as f:
             body_content = f.read()
 
+    clean_subject = sanitize_content(args.subject)
+    clean_body = sanitize_content(body_content)
+
     msg = EmailMessage()
-    msg["Subject"] = args.subject
+    msg["Subject"] = clean_subject
     msg["From"] = args.from_addr
     msg["To"] = args.to
-    msg.set_content(body_content)
+    msg.set_content(clean_body)
 
     print("================================================================================")
     print(" ✉️ GENERAL-PURPOSE EMAIL & ATTACHMENT DISPATCHER")
@@ -70,15 +88,31 @@ def main():
             msg.add_attachment(file_data, maintype=maintype, subtype=subtype, filename=filename)
         attached_count += 1
 
-    # Attempt local SMTP dispatch or save to outbox
+    # Attempt dispatch via Resend SMTP or local relay
     sent = False
+    resend_key = os.environ.get("RESEND_API_KEY", "")
+    
+    # 1. Try Resend SMTP first
     try:
-        with smtplib.SMTP("localhost", 25, timeout=5) as s:
+        msg["From"] = "Deep Agent SRE <onboarding@resend.dev>"
+        with smtplib.SMTP("smtp.resend.com", 587, timeout=20) as s:
+            s.starttls()
+            s.login("resend", resend_key)
             s.send_message(msg)
             sent = True
-            print(f"\n✓ Successfully sent email with {attached_count} attachment(s) via SMTP to {args.to}")
-    except Exception:
-        pass
+            print(f"\n✓ Successfully sent email with {attached_count} attachment(s) via Resend SMTP to {args.to}")
+    except Exception as e:
+        print(f"  ℹ️ Resend SMTP attempt note: {e}")
+
+    # 2. Try local SMTP if Resend failed
+    if not sent:
+        try:
+            with smtplib.SMTP("localhost", 25, timeout=5) as s:
+                s.send_message(msg)
+                sent = True
+                print(f"\n✓ Successfully sent email with {attached_count} attachment(s) via local SMTP to {args.to}")
+        except Exception:
+            pass
 
     # Save to outbox
     os.makedirs(args.outbox, exist_ok=True)

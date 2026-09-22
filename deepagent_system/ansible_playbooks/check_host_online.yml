@@ -1,18 +1,35 @@
 ---
-# Production Ansible Playbook: Check Host Online and SSH Verification
-- name: Verify Host Accessibility and SSH Port 22
-  hosts: localhost
+- name: Verify Host TCP Connectivity and System Health
+  hosts: "{{ hostlist | default('all') }}"
   gather_facts: false
   tasks:
-    - name: Test TCP Connection on Port 22
-      ansible.builtin.wait_for:
-        host: "{{ target_host | default(hostname) }}"
-        port: 22
-        state: started
-        timeout: "{{ timeout | default(45) }}"
-      register: port_check
-      ignore_errors: true
+    - name: Probe Reachability Block
+      block:
+        - name: Probe SSH Port 22
+          ansible.builtin.wait_for:
+            port: 22
+            host: "{{ inventory_hostname }}"
+            timeout: 15
+            state: started
 
-    - name: Report Online Status
-      ansible.builtin.debug:
-        msg: "Host {{ target_host | default(hostname) }} is {{ 'ONLINE (Port 22 Reachable)' if port_check.failed is not defined or not port_check.failed else 'OFFLINE / UNRESPONSIVE' }}."
+        - name: Query Host Uptime and Load Average
+          ansible.builtin.command: uptime
+          register: uptime_out
+          changed_when: false
+
+        - name: Query Running Kernel
+          ansible.builtin.command: uname -r
+          register: kernel_out
+          changed_when: false
+
+        - name: Report Host Online
+          ansible.builtin.debug:
+            msg: "STATUS: ONLINE. Host: {{ inventory_hostname }}. Kernel: {{ kernel_out.stdout }}. {{ uptime_out.stdout }}"
+
+      rescue:
+        - name: Report Host Unreachable to Deep Agent
+          ansible.builtin.fail:
+            msg: >
+              STATUS: UNREACHABLE.
+              Host: {{ inventory_hostname }}.
+              Error: TCP Port 22 closed or connection timed out after 15s.

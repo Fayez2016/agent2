@@ -1,20 +1,67 @@
 ---
-# Production Ansible Playbook: Out-of-Band VMware Virtual Machine Power Reset
-- name: Hard Power Reset Virtual Machine via VMware API
+- name: Hard Power Reset Virtual Machine via VMware vCenter REST API
   hosts: localhost
   gather_facts: false
+  vars:
+    vc_host: "{{ vcenter_host | default(lookup('env', 'VMWARE_HOST') | default('vcenter.enterprise.local')) }}"
+    vc_user: "{{ vcenter_user | default(lookup('env', 'VMWARE_USER') | default('administrator@vsphere.local')) }}"
+    vc_pass: "{{ vcenter_password | default(lookup('env', 'VMWARE_PASSWORD') | default('secret')) }}"
+    target_vm: "{{ vm_name | default(hostname) }}"
   tasks:
-    - name: Reset VM State
-      community.vmware.vmware_guest_powerstate:
-        hostname: "{{ vcenter_host | default('vcenter.enterprise.local') }}"
-        username: "{{ vcenter_user | default('administrator@vsphere.local') }}"
-        password: "{{ vcenter_password | default('secret') }}"
-        validate_certs: false
-        name: "{{ vm_name | default(hostname) }}"
-        state: reset
-      register: vm_reset_out
-      ignore_errors: true
+    - name: Execute VMware REST API Reset Block
+      block:
+        # Step 1: Authenticate with vCenter REST API
+        - name: Obtain vCenter REST Session Token
+          ansible.builtin.uri:
+            url: "https://{{ vc_host }}/api/session"
+            method: POST
+            user: "{{ vc_user }}"
+            password: "{{ vc_pass }}"
+            force_basic_auth: true
+            validate_certs: false
+            status_code: [201, 200]
+          register: vc_session
 
-    - name: Report VM Reset Status
-      ansible.builtin.debug:
-        msg: "VMware reset successfully executed for VM {{ vm_name | default(hostname) }}."
+        # Step 2: Query VM identifier by Name
+        - name: Find Target VM by Name
+          ansible.builtin.uri:
+            url: "https://{{ vc_host }}/api/vcenter/vm?names={{ target_vm }}"
+            method: GET
+            headers:
+              vmware-api-session-id: "{{ vc_session.json }}"
+            validate_certs: false
+            status_code: 200
+          register: vm_lookup
+          failed_when: vm_lookup.json | length == 0
+
+        - name: Extract VM ID
+          ansible.builtin.set_fact:
+            vm_id: "{{ vm_lookup.json[0].vm }}"
+
+        # Step 3: Issue Hard Reset Call via REST API
+        - name: Trigger Hard Power Reset on Target VM
+          ansible.builtin.uri:
+            url: "https://{{ vc_host }}/api/vcenter/vm/{{ vm_id }}/power?action=reset"
+            method: POST
+            headers:
+              vmware-api-session-id: "{{ vc_session.json }}"
+            validate_certs: false
+            status_code: 200
+          register: reset_call
+
+        - name: Report VMware Hard Reset Success
+          ansible.builtin.debug:
+            msg: >
+              STATUS: SUCCESS.
+              Target VM: {{ target_vm }} (vCenter ID: {{ vm_id }}).
+              Action: Power Reset (Hard Power Cycle).
+              vCenter: {{ vc_host }}.
+
+      rescue:
+        - name: Report VMware API Error to Deep Agent
+          ansible.builtin.fail:
+            msg: >
+              STATUS: FAILED_VMWARE_RESET.
+              Target VM: {{ target_vm }}.
+              vCenter Endpoint: https://{{ vc_host }}.
+              Lookup / Reset Error: {{ vm_lookup.msg | default(reset_call.msg | default('Failed to authenticate or locate VM in vCenter')) }}.

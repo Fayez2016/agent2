@@ -4,6 +4,8 @@ import random
 import time
 import os
 import smtplib
+import urllib.request
+import urllib.error
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone
@@ -21,9 +23,10 @@ job_counter = 1000
 CONSOLE_RECOVERED_HOSTS = set()
 PCS_FIXED_HOSTS = set()
 
-# Gmail SMTP Configuration
-GMAIL_USER = "fayez.soufyani@gmail.com"
-GMAIL_APP_PASS = "ypnw wgdw qlut fdca"
+# Resend Email Configuration
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+DEFAULT_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "Deep Agent SRE <onboarding@resend.dev>")
+DEFAULT_RECIPIENT = os.environ.get("NOTIFICATION_EMAIL", "fayez.soufyani@gmail.com")
 
 def get_iso_now():
     return datetime.now(timezone.utc).isoformat()
@@ -34,31 +37,66 @@ def extract_host_tokens(raw_str):
     import re
     return [t.strip() for t in re.split(r'[\s,;|]+', str(raw_str)) if t.strip()]
 
-def send_live_gmail_notification(recipient: str, subject: str, body: str) -> bool:
-    """Dispatches a real email to the operator Gmail inbox using TLS/SSL with retries."""
-    msg = MIMEMultipart()
-    msg["From"] = f"Deep Agent SRE <{GMAIL_USER}>"
-    msg["To"] = recipient or GMAIL_USER
-    msg["Subject"] = subject or "[SRE Report] Deep Agent Execution Summary"
-    msg.attach(MIMEText(body, "plain"))
+def sanitize_email_content(text: str) -> str:
+    """Sanitizes email content to remove internal IPs, company names, and hostnames."""
+    if not text:
+        return ""
+    import re
+    s = re.sub(r'(?i)aramco\.com', 'enterprise.local', text)
+    s = re.sub(r'(?i)aramco', 'enterprise', s)
+    s = re.sub(r'\bps[0-9]{5,7}\b', 'rhel-node01', s)
+    s = re.sub(r'\bcs-popcorn\b', 'node-primary', s)
+    s = re.sub(r'\bsouffm0a\b', 'operator', s)
+    s = re.sub(r'\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '10.x.x.x', s)
+    s = re.sub(r'\b172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}\b', '172.x.x.x', s)
+    s = re.sub(r'\b192\.168\.\d{1,3}\.\d{1,3}\b', '192.168.x.x', s)
+    return s
 
-    for attempt in range(1, 4):
-        for port in (587, 465):
-            try:
-                if port == 465:
-                    server = smtplib.SMTP_SSL("smtp.gmail.com", port, timeout=12.0)
-                else:
-                    server = smtplib.SMTP("smtp.gmail.com", port, timeout=12.0)
-                    server.starttls()
-                server.login(GMAIL_USER, GMAIL_APP_PASS)
-                server.send_message(msg)
-                server.quit()
-                logger.info(f"✅ Real Gmail successfully dispatched to {recipient} via smtp.gmail.com:{port} on attempt {attempt}")
-                return True
-            except Exception as e:
-                logger.warning(f"Attempt {attempt} via port {port} failed: {e}")
-        time.sleep(2)
-    logger.error(f"❌ Failed to dispatch live Gmail to {recipient} after all attempts.")
+def send_live_gmail_notification(recipient: str, subject: str, body: str) -> bool:
+    """Dispatches a real email notification using Resend API / SMTP."""
+    target_recipient = recipient or DEFAULT_RECIPIENT
+    clean_subject = sanitize_email_content(subject or "[SRE Report] Deep Agent Execution Summary")
+    clean_body = sanitize_email_content(body or "")
+
+    # 1. Try Resend REST API
+    try:
+        url = "https://api.resend.com/emails"
+        payload = {
+            "from": DEFAULT_FROM_EMAIL,
+            "to": [target_recipient],
+            "subject": clean_subject,
+            "text": clean_body
+        }
+        headers = {
+            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "curl/7.88.1"
+        }
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+        with urllib.request.urlopen(req, timeout=12.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            logger.info(f"✅ Notification successfully dispatched to {target_recipient} via Resend API (ID: {data.get('id')})")
+            return True
+    except Exception as e:
+        logger.warning(f"Resend REST API send attempt failed: {e}")
+
+    # 2. Fallback to Resend SMTP
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = DEFAULT_FROM_EMAIL
+        msg["To"] = target_recipient
+        msg["Subject"] = clean_subject
+        msg.attach(MIMEText(clean_body, "plain"))
+
+        with smtplib.SMTP("smtp.resend.com", 587, timeout=12.0) as server:
+            server.starttls()
+            server.login("resend", RESEND_API_KEY)
+            server.send_message(msg)
+            logger.info(f"✅ Notification successfully dispatched to {target_recipient} via Resend SMTP")
+            return True
+    except Exception as e:
+        logger.error(f"❌ Resend SMTP dispatch to {target_recipient} failed: {e}")
+
     return False
 
 # 10 Clusters Dynamic Registry
@@ -130,7 +168,7 @@ def launch_job(template_id):
 
     # 3. Handle Send Email Notification (Dispatch Real Gmail)
     if template_id == 109:
-        recipient = extra_vars.get('recipient', GMAIL_USER)
+        recipient = extra_vars.get('recipient', DEFAULT_RECIPIENT)
         subj = extra_vars.get('subject', '[SRE Report] Deep Agent Maintenance Completed')
         body = extra_vars.get('body', 'Deep Agent SRE Maintenance Completed Successfully.')
         send_live_gmail_notification(recipient, subj, body)
@@ -360,7 +398,7 @@ def get_job_stdout(job_id):
 
     # 10. Send Email Notification
     if template_id == 109:
-        recipient = extra_vars.get('recipient', GMAIL_USER)
+        recipient = extra_vars.get('recipient', DEFAULT_RECIPIENT)
         subj = extra_vars.get('subject', '[SRE Report] Maintenance Completed')
         return f"""
 PLAY [Send Email Notification] *************************************************

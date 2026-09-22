@@ -1,0 +1,27 @@
+[Unit]
+Description=Deep Agent Autonomous SRE Orchestration Platform
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h/agent2
+EnvironmentFile=-%h/agent2/.env.production
+
+# 1. Non-blocking Pre-Execution: Sync latest playbooks/prompts from GitLab (failsafe: exit 0 on offline)
+ExecStartPre=-%h/agent2/deepagent_git_sync.sh
+
+# 2. Main Execution: Launch unified 7-microservice pod with self-healing DB & TLS
+ExecStart=%h/agent2/offline_install.sh
+
+# 3. Clean Stop: Gracefully remove pod and containers on systemd stop
+ExecStop=/usr/bin/podman pod stop deepagent-prod-pod
+ExecStopPost=/usr/bin/podman pod rm -f deepagent-prod-pod
+
+TimeoutStartSec=180
+TimeoutStopSec=30
+Restart=no
+
+[Install]
+WantedBy=default.target

@@ -31,3 +31,7 @@
   - **Ansible Execution MCP Server:** `http://deepagent-ansible-mcp:8000/mcp`
   - **Dedicated SOP FastMCP Server:** `http://deepagent-sop-mcp:8001/mcp`
 - All agent conversational state, execution traces, and HITL authorization audits are stored in the PostgreSQL database (`hitl-db:5432`).
+
+# Email Privacy & Anonymization Mandate
+- **STRICT CORPORATE PRIVACY:** In any outbound email (scripts, notifications, reports, logs), NEVER include company names (Aramco), internal IPs (10.x, 172.x, 192.168.x), employee usernames, or production hostnames.
+- **GENERALIZE ALL IDENTIFIERS:** All hostnames, clusters, domain names, and parameters in email subjects and bodies must be abstracted into generic references (e.g. `node-primary`, `rhel-srv01`, `cluster-01`, `enterprise.local`).

@@ -2008,6 +2008,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 streamTextEl.innerHTML = formatMarkdown(fullText);
               }
             }
+
+            // Event: Stream Error
+            else if (parsed.event === "error") {
+              const errMsg = parsed.error || "Unknown stream error occurred.";
+              streamTextEl.innerHTML = `<span style="color: #ef4444; font-weight: 600;">⚠️ LLM Error: ${escapeHtml(errMsg)}</span>`;
+              scrollToBottom();
+            }
           } catch (err) {
             console.warn("Error parsing SSE chunk:", err);
           }

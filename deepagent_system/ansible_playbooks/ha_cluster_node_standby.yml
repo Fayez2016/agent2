@@ -1,23 +1,45 @@
 ---
-# Production Ansible Playbook: RHEL HA Node Standby (Resource Evacuation)
-# Places the target node into STANDBY mode and monitors resource migration to peers.
-- name: Evacuate Resources by Putting Node in Standby
+- name: Evacuate Cluster Node Resources (PCS Standby)
   hosts: "{{ hostname | default(inventory_hostname) }}"
   gather_facts: false
   tasks:
-    - name: Put Node in Standby Mode
-      ansible.builtin.command: pcs node standby {{ inventory_hostname }}
-      register: standby_result
-      changed_when: standby_result.rc == 0
+    - name: Execute Node Standby with Structured Error Handling
+      block:
+        - name: Verify Cluster Service is Running Before Standby
+          ansible.builtin.command: pcs status
+          register: pre_status
+          changed_when: false
 
-    - name: Wait for Cluster Resources to Migrate to Peer Nodes
-      ansible.builtin.command: pcs status --xml
-      register: pcs_xml_status
-      until: "inventory_hostname not in pcs_xml_status.stdout or 'standby' in pcs_xml_status.stdout"
-      retries: 6
-      delay: 5
-      changed_when: false
+        - name: Issue PCS Node Standby Command
+          ansible.builtin.command: pcs node standby {{ inventory_hostname }}
+          register: standby_result
+          changed_when: standby_result.rc == 0
 
-    - name: Report Node Standby Success
-      ansible.builtin.debug:
-        msg: "Node {{ inventory_hostname }} put in STANDBY mode. Resources migrated successfully."
+        - name: Wait for Cluster Resources to Live-Migrate to Peer Nodes
+          ansible.builtin.command: pcs status --xml
+          register: pcs_xml_status
+          until: "inventory_hostname not in pcs_xml_status.stdout or 'standby' in pcs_xml_status.stdout"
+          retries: 10
+          delay: 5
+          changed_when: false
+
+        - name: Report Node Standby Success
+          ansible.builtin.debug:
+            msg: >
+              STATUS: SUCCESS.
+              Node: {{ inventory_hostname }} placed in STANDBY.
+              Resources successfully evacuated to peers.
+
+      rescue:
+        - name: Capture Cluster Diagnostic on Standby Failure
+          ansible.builtin.command: pcs status
+          register: failure_pcs_status
+          ignore_errors: true
+
+        - name: Report Structured Error to Deep Agent
+          ansible.builtin.fail:
+            msg: >
+              STATUS: FAILED.
+              Action: PCS Node Standby on {{ inventory_hostname }}.
+              Error: {{ standby_result.stderr | default(pcs_xml_status.stderr | default('Cluster resource migration timed out')) }}.
+              Cluster State at Failure: {{ failure_pcs_status.stdout | default('N/A') }}.

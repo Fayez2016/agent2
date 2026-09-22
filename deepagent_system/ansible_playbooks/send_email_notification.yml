@@ -1,19 +1,29 @@
 ---
-# Production Ansible Playbook: Send SRE Notification Email
-- name: Dispatch Maintenance Notification Email
+- name: Dispatch SRE Notification and Post-Mortem Report
   hosts: localhost
   gather_facts: false
   tasks:
-    - name: Send Summary Email to Administrator
-      community.general.mail:
-        host: "{{ smtp_host | default('smtp.enterprise.local') }}"
-        port: "{{ smtp_port | default(25) }}"
-        to: "{{ recipient | default('admin@enterprise.local') }}"
-        subject: "{{ subject | default('[SRE Report] Maintenance Completed') }}"
-        body: "{{ body | default('Maintenance execution report from Deep Agent.') }}"
-        subtype: html
-      ignore_errors: true
+    - name: Send SRE Email Block
+      block:
+        - name: Send Notification via SMTP Relay
+          community.general.mail:
+            host: "{{ smtp_host | default('smtp.enterprise.local') }}"
+            port: "{{ smtp_port | default(25) }}"
+            to: "{{ recipient | default('fayez.soufyani@gmail.com') }}"
+            subject: "{{ subject | default('[SRE Report] Deep Agent Execution Summary') }}"
+            body: "{{ body | default('Maintenance execution report from Deep Agent.') }}"
+            subtype: html
+          register: mail_out
 
-    - name: Log Email Dispatch Success
-      ansible.builtin.debug:
-        msg: "Notification email successfully dispatched to {{ recipient | default('admin@enterprise.local') }}."
+        - name: Report Email Dispatch Success
+          ansible.builtin.debug:
+            msg: "STATUS: SUCCESS. Notification delivered to {{ recipient }}."
+
+      rescue:
+        - name: Report Mailer Error to Deep Agent
+          ansible.builtin.fail:
+            msg: >
+              STATUS: FAILED_EMAIL_DISPATCH.
+              Recipient: {{ recipient }}.
+              SMTP Host: {{ smtp_host | default('smtp.enterprise.local') }}.
+              Error: {{ mail_out.msg | default('Could not connect to SMTP relay') }}.

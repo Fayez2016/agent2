@@ -1,24 +1,47 @@
 ---
-# Production Ansible Playbook: Fleet Security & Package Patching
-# Applies latest DNF packages across fleet servers with transaction logging.
-- name: Apply Enterprise Package Updates
+- name: Apply Enterprise DNF/YUM Security & System Packages
   hosts: "{{ hostlist | default('all') }}"
-  gather_facts: false
+  gather_facts: true
   tasks:
-    - name: Apply Available Updates via DNF
-      ansible.builtin.dnf:
-        name: "*"
-        state: latest
-        update_cache: true
-        security: "{{ security_only | default(false) }}"
-      register: dnf_update_result
+    - name: Package Patching Block
+      block:
+        - name: Capture Pre-Patch Kernel & System Info
+          ansible.builtin.command: uname -r
+          register: pre_kernel
+          changed_when: false
 
-    - name: Check if Reboot is Required
-      ansible.builtin.command: needs-restarting -r
-      register: needs_restarting_out
-      changed_when: false
-      failed_when: false
+        - name: Apply Package Updates via DNF
+          ansible.builtin.dnf:
+            name: "*"
+            state: latest
+            update_cache: true
+            security: false
+          register: dnf_result
 
-    - name: Log Patching Results
-      ansible.builtin.debug:
-        msg: "Patching completed on {{ inventory_hostname }}. Changed: {{ dnf_update_result.changed }}. Reboot required: {{ needs_restarting_out.rc == 1 }}"
+        - name: Detect If Kernel Was Updated
+          ansible.builtin.command: rpm -q --last kernel | head -n 1
+          register: post_kernel_pkg
+          changed_when: false
+
+        - name: Report Patching Results
+          ansible.builtin.debug:
+            msg: >
+              STATUS: SUCCESS.
+              Host: {{ inventory_hostname }}.
+              Pre-Kernel: {{ pre_kernel.stdout }}.
+              Packages Updated: {{ dnf_result.results | default([]) | length }}.
+              Latest Installed Kernel Package: {{ post_kernel_pkg.stdout }}.
+
+      rescue:
+        - name: Capture DNF Failure Log
+          ansible.builtin.command: tail -n 25 /var/log/dnf.log
+          register: dnf_log
+          ignore_errors: true
+
+        - name: Report Patching Error to Deep Agent
+          ansible.builtin.fail:
+            msg: >
+              STATUS: FAILED.
+              Action: Patch Fleet on {{ inventory_hostname }}.
+              DNF Error: {{ dnf_result.msg | default('Package transaction failed') }}.
+              Log Extract: {{ dnf_log.stdout | default('Unable to read /var/log/dnf.log') }}.

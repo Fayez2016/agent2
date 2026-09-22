@@ -1,29 +1,36 @@
 ---
-# Production Ansible Playbook: RHEL HA Node Unstandby (Reintegration)
-# Takes the target node out of STANDBY mode and verifies cluster quorum restoration.
-- name: Reintegrate Node by Clearing Standby Status
+- name: Reintegrate Node to Cluster (PCS Unstandby)
   hosts: "{{ hostname | default(inventory_hostname) }}"
   gather_facts: false
   tasks:
-    - name: Clear Node Standby Status
-      ansible.builtin.command: pcs node unstandby {{ inventory_hostname }}
-      register: unstandby_result
-      changed_when: unstandby_result.rc == 0
+    - name: Execute Node Reintegration with Quorum Validation
+      block:
+        - name: Remove Standby Constraint
+          ansible.builtin.command: pcs node unstandby {{ inventory_hostname }}
+          register: unstandby_result
+          changed_when: unstandby_result.rc == 0
 
-    - name: Clean up Any Transient Resource Failures
-      ansible.builtin.command: pcs resource cleanup
-      register: cleanup_result
-      changed_when: cleanup_result.rc == 0
-      failed_when: false
+        - name: Validate Corosync Quorum Membership
+          ansible.builtin.command: corosync-cfgtool -s
+          register: corosync_status
+          failed_when: "'status: OK' not in corosync_status.stdout"
+          changed_when: false
 
-    - name: Verify Node is Online and Quorate
-      ansible.builtin.command: pcs status
-      register: final_pcs_status
-      until: "'Online:' in final_pcs_status.stdout and inventory_hostname in final_pcs_status.stdout"
-      retries: 6
-      delay: 5
-      changed_when: false
+        - name: Confirm Node is Online in PCS Status
+          ansible.builtin.command: pcs status
+          register: pcs_status
+          failed_when: "'standby' in pcs_status.stdout or 'Offline' in pcs_status.stdout"
+          changed_when: false
 
-    - name: Report Node Unstandby Success
-      ansible.builtin.debug:
-        msg: "Node {{ inventory_hostname }} taken out of STANDBY mode and successfully reintegrated into cluster."
+        - name: Report Reintegration Success
+          ansible.builtin.debug:
+            msg: "STATUS: SUCCESS. Node {{ inventory_hostname }} re-entered cluster with active quorum."
+
+      rescue:
+        - name: Report Structured Error to Deep Agent
+          ansible.builtin.fail:
+            msg: >
+              STATUS: FAILED.
+              Action: PCS Node Unstandby on {{ inventory_hostname }}.
+              Unstandby Output: {{ unstandby_result.stderr | default(unstandby_result.stdout | default('Unknown')) }}.
+              Corosync Status: {{ corosync_status.stdout | default('Failed to query corosync') }}.
