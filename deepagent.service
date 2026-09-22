@@ -21,7 +21,8 @@ ExecStopPost=/usr/bin/podman pod rm -f deepagent-prod-pod
 
 TimeoutStartSec=180
 TimeoutStopSec=30
-Restart=no
+Restart=on-failure
+RestartSec=15s
 
 [Install]
 WantedBy=default.target
