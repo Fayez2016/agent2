@@ -18,6 +18,17 @@ import urllib.error
 from email.message import EmailMessage
 
 DEFAULT_RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+if not DEFAULT_RESEND_API_KEY:
+    for env_path in ["/home/fayez/agent2/.env", "/home/fayez/agent2/deepagent_system/.env"]:
+        if os.path.isfile(env_path):
+            with open(env_path) as ef:
+                for line in ef:
+                    if line.strip().startswith("RESEND_API_KEY="):
+                        DEFAULT_RESEND_API_KEY = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+                        break
+        if DEFAULT_RESEND_API_KEY:
+            break
+
 DEFAULT_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "Deep Agent SRE <onboarding@resend.dev>")
 DEFAULT_RECIPIENT = os.environ.get("NOTIFICATION_EMAIL", "fayez.soufyani@gmail.com")
 

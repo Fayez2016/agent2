@@ -35,3 +35,11 @@
 # Email Privacy & Anonymization Mandate
 - **STRICT CORPORATE PRIVACY:** In any outbound email (scripts, notifications, reports, logs), NEVER include company names (Aramco), internal IPs (10.x, 172.x, 192.168.x), employee usernames, or production hostnames.
 - **GENERALIZE ALL IDENTIFIERS:** All hostnames, clusters, domain names, and parameters in email subjects and bodies must be abstracted into generic references (e.g. `node-primary`, `rhel-srv01`, `cluster-01`, `enterprise.local`).
+
+# Antigravity (AGY) Assistant Operational Directives
+- **Direct Email Dispatch via Resend:** When the user requests to send emails, scripts, or reports, Antigravity MUST send them directly in sanitized plain text to `fayez.soufyani@gmail.com` using Resend (`python3 send_email_inline_body.py`).
+- **Strict Privacy in All Emails:** Never include any references to Aramco, internal private IPs (10.x, 172.x, 192.168.x), or internal hostnames. Always sanitize to generic terms (`enterprise`, `rhel-node01`, `enterprise.local`).
+- **Code Change Freeze:** Application code changes are frozen. Do NOT modify Python application code unless explicitly requested by the user. Focus work exclusively on YAML declarative configurations (`config/agents_fleet.yaml`), agent prompts, and SOPs.
+- **Mandatory Safe Update Pipeline:** When an application or infrastructure update IS required, Antigravity MUST execute the update via `scripts/apply_update_with_snapshot_and_rollback.sh` to ensure pre-update snapshots, post-update smoke verification, automatic rollback on failure, and clean Git commits on success.
+- **Always Test Locally First:** Always test and verify solutions locally before presenting or delivering them to the user.
+
