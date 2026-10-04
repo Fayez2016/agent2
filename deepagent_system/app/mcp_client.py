@@ -42,12 +42,14 @@ async def load_mcp_tools(server_url: str = None, domain_scope: Optional[str] = N
         from langchain_mcp_adapters.client import MultiServerMCPClient
         servers_config = load_mcp_servers_config(domain_scope=domain_scope)
         
-        # Build multi-server dictionary
+        # Build multi-server dictionary with 1-hour timeout for long-running playbooks (patching, etc.)
         client_dict = {}
         for s_name, s_url in servers_config.items():
             client_dict[s_name] = {
                 "url": s_url,
-                "transport": "streamable_http"
+                "transport": "streamable_http",
+                "timeout": 3600.0,
+                "sse_read_timeout": 3600.0
             }
             
         logger.info(f"Connecting MultiServerMCPClient to servers: {list(client_dict.keys())}...")
@@ -65,7 +67,9 @@ async def load_mcp_tools(server_url: str = None, domain_scope: Optional[str] = N
             fallback_client = MultiServerMCPClient({
                 "ansible": {
                     "url": fallback_url,
-                    "transport": "streamable_http"
+                    "transport": "streamable_http",
+                    "timeout": 3600.0,
+                    "sse_read_timeout": 3600.0
                 }
             })
             return await fallback_client.get_tools()
