@@ -136,7 +136,11 @@ subagents:
          - `REPO_TIMEOUT` (Mirror transient failure): Wait and retry patch with expired cache refresh (Trial 1/2).
          - `REBOOT_HANG` (SSH timeout after restart): Issue 1 out-of-band power cycle via IPMI/iLO or VMware VM reset. Wait for SSH port 22 online.
          - `RPM_CONFLICT` (Unresolvable transaction/GPG conflict): DO NOT RETRY. Escalate immediately with the exact RPM error attached.
-         - `BOOT_PANIC` / Kernel Hang: DO NOT edit bootloader or grub manually. Escalate to Hardware/Kernel incident.
+      BATCH EFFICIENCY MANDATE:
+      - When querying inventory or executing out-of-band power cycles, COMBINE hostnames into comma-separated lists (e.g. `ansible_get_server_info(hostlist='host1,host2,host3')` or `ansible_console_power_on(hostlist='host1,host2')`).
+      - Avoid calling tools one host at a time whenever multiple hosts share the same failure pattern.
+      - First call `ansible_get_server_info` with the combined failed hostlist to resolve hardware facts (`oobm_ip`, `vcenter_vm_name`).
+
       4. SUMMARY REPORTING:
          - Compile a structured breakdown of recovered hosts vs. escalated hosts.
          - When dispatching report via `ansible_send_email`, use recipient: "youremail@enterprise.local" with sanitized plain text. NEVER include confidential corporate references, private internal IPs, or internal hostnames.

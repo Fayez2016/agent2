@@ -466,7 +466,28 @@ def get_job_stdout(job_id):
             lines.append(f"{t:30} : ok=2    changed=0    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 10. Send Email Notification
+    # 10. Get Server Info (Template 126 - Returns Batch Server Telemetry, OOBM & vCenter metadata)
+    if template_id == 126:
+        lines = [f"PLAY [Get Server Info & Telemetry ({len(targets)} Targets)] ********************"]
+        lines.append("TASK [Gather Server Facts, OOBM IP & Hypervisor Metadata] **********************")
+        for t in targets:
+            is_vm = not ("bm" in t.lower() or "bare" in t.lower() or "phys" in t.lower())
+            oobm_ip = f"10.20.30.{random.randint(10, 250)}"
+            vm_name = t if is_vm else "N/A"
+            lines.append(f"ok: [{t}] => {{")
+            lines.append(f"    \"host\": \"{t}\",")
+            lines.append(f"    \"is_virtual\": {str(is_vm).lower()},")
+            lines.append(f"    \"oobm_ip\": \"{oobm_ip}\",")
+            lines.append(f"    \"oobm_protocol\": \"redfish_ilo\",")
+            lines.append(f"    \"vcenter_vm_name\": \"{vm_name}\",")
+            lines.append(f"    \"status\": \"inventory_resolved\"")
+            lines.append("}")
+        lines.append("\nPLAY RECAP *********************************************************************")
+        for t in targets:
+            lines.append(f"{t:30} : ok=2    changed=0    unreachable=0    failed=0")
+        return "\n".join(lines)
+
+    # 11. Send Email Notification
     if template_id == 109:
         recipient = extra_vars.get('recipient', 'admin@enterprise.local')
         subj = extra_vars.get('subject', '[SRE Report] Maintenance Completed')

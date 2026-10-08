@@ -491,7 +491,7 @@ def ansible_reboot_host(hostname: str) -> str:
 @mcp.tool()
 def ansible_vmware_reset(vm_name: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
-    Hard reset a VM via VMware API."""
+    Hard reset a VM or list of VMs via VMware API. Accepts a single VM name or comma-separated list."""
     return run_ansible_job_logic("VMware VM Reset", {"vm_name": vm_name, "hostname": vm_name, "hostlist": vm_name}, is_high_risk=True)
 
 # Standard tools (No HITL required)
