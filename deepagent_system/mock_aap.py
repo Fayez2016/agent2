@@ -51,7 +51,8 @@ TEMPLATE_MAP = {
     "Get Server Info": 126,
     "Check Host Online": 127,
     "Console Power On": 128,
-    "HA Rolling Update": 129
+    "HA Rolling Update": 129,
+    "Get Maintenance Window Hosts": 130
 }
 
 jobs = {}
@@ -71,20 +72,26 @@ def extract_host_tokens(raw_input) -> list:
     tokens = [t.strip() for t in tokens if t.strip() and t.lower() not in ["and", "to", "across", "hosts", "clusters", "the"]]
     return tokens if tokens else ["srv-generic-01"]
 
-@app.route('/api/v2/job_templates', methods=['GET'])
+@app.route('/api/v2/ping', methods=['GET'], strict_slashes=False)
+@app.route('/api/v2/ping/', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/ping', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/ping/', methods=['GET'], strict_slashes=False)
+def ping_aap():
+    return jsonify({"status": "ok", "version": "2.4.0"})
+
+@app.route('/api/v2/job_templates', methods=['GET'], strict_slashes=False)
+@app.route('/api/v2/job_templates/', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/job_templates', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/job_templates/', methods=['GET'], strict_slashes=False)
 def get_job_templates():
     name = request.args.get('name')
-    template_id = TEMPLATE_MAP.get(name, 200)
-    
-    return jsonify({
-        "count": 1,
-        "next": None,
-        "previous": None,
-        "results": [
+    if name:
+        template_id = TEMPLATE_MAP.get(name, 200)
+        results = [
             {
                 "id": template_id,
                 "type": "job_template",
-                "url": f"/api/v2/job_templates/{template_id}/",
+                "url": f"/api/controller/v2/job_templates/{template_id}/",
                 "name": name,
                 "description": f"Dynamic SRE infrastructure simulation for {name}",
                 "job_type": "run",
@@ -95,9 +102,34 @@ def get_job_templates():
                 "modified": get_iso_now()
             }
         ]
+    else:
+        results = []
+        for t_name, t_id in TEMPLATE_MAP.items():
+            results.append({
+                "id": t_id,
+                "type": "job_template",
+                "url": f"/api/controller/v2/job_templates/{t_id}/",
+                "name": t_name,
+                "description": f"Dynamic SRE infrastructure simulation for {t_name}",
+                "job_type": "run",
+                "inventory": 1,
+                "project": 1,
+                "playbook": f"{t_name.lower().replace(' ', '_')}.yml",
+                "created": "2026-01-01T12:00:00.000000Z",
+                "modified": get_iso_now()
+            })
+    
+    return jsonify({
+        "count": len(results),
+        "next": None,
+        "previous": None,
+        "results": results
     })
 
-@app.route('/api/v2/job_templates/<int:template_id>/launch/', methods=['POST'])
+@app.route('/api/v2/job_templates/<int:template_id>/launch/', methods=['POST'], strict_slashes=False)
+@app.route('/api/v2/job_templates/<int:template_id>/launch', methods=['POST'], strict_slashes=False)
+@app.route('/api/controller/v2/job_templates/<int:template_id>/launch/', methods=['POST'], strict_slashes=False)
+@app.route('/api/controller/v2/job_templates/<int:template_id>/launch', methods=['POST'], strict_slashes=False)
 def launch_job(template_id):
     job_id = random.randint(10000, 99999)
     extra_vars = {}
@@ -132,10 +164,13 @@ def launch_job(template_id):
     return jsonify({
         "job": job_id,
         "type": "job",
-        "url": f"/api/v2/jobs/{job_id}/"
+        "url": f"/api/controller/v2/jobs/{job_id}/"
     }), 201
 
-@app.route('/api/v2/jobs/<int:job_id>/', methods=['GET'])
+@app.route('/api/v2/jobs/<int:job_id>/', methods=['GET'], strict_slashes=False)
+@app.route('/api/v2/jobs/<int:job_id>', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/jobs/<int:job_id>/', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/jobs/<int:job_id>', methods=['GET'], strict_slashes=False)
 def get_job_status(job_id):
     job = jobs.get(job_id)
     if not job:
@@ -147,7 +182,7 @@ def get_job_status(job_id):
     return jsonify({
         "id": job_id,
         "type": "job",
-        "url": f"/api/v2/jobs/{job_id}/",
+        "url": f"/api/controller/v2/jobs/{job_id}/",
         "name": "Dynamic Simulation Job",
         "status": current_status,
         "failed": False,
@@ -157,7 +192,10 @@ def get_job_status(job_id):
         "extra_vars": json.dumps(job["extra_vars"])
     })
 
-@app.route('/api/v2/jobs/<int:job_id>/stdout/', methods=['GET'])
+@app.route('/api/v2/jobs/<int:job_id>/stdout/', methods=['GET'], strict_slashes=False)
+@app.route('/api/v2/jobs/<int:job_id>/stdout', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/jobs/<int:job_id>/stdout/', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/jobs/<int:job_id>/stdout', methods=['GET'], strict_slashes=False)
 def get_job_stdout(job_id):
     job = jobs.get(job_id)
     if not job:
@@ -323,6 +361,21 @@ ok: [localhost] => {{
 }}
 PLAY RECAP *********************************************************************
 localhost                      : ok=2    changed=1    unreachable=0    failed=0
+"""
+
+    # 11. Get Maintenance Window Hosts
+    if template_id == 130:
+        return """
+PLAY [Discover Maintenance Window Target Hosts] ********************************
+TASK [Filter Inventory by Maintenance Window & Role Tag] **********************
+ok: [localhost] => {
+    "msg": "Maintenance Window Active. Discovered eligible hosts.",
+    "hosts": ["ha_cluster01_node1", "ha_cluster01_node2", "rhel-app-srv01", "rhel-db-srv02"],
+    "window_tag": "PRODUCTION_WAVE_1",
+    "status": "active"
+}
+PLAY RECAP *********************************************************************
+localhost                      : ok=2    changed=0    unreachable=0    failed=0
 """
 
     # Generic Fallback

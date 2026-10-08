@@ -1,0 +1,16 @@
+# ==============================================================================
+# Deep Agent Gateway & LLM Configuration File
+# Place this file as 'gateway.conf' in /opt/td-agent/ or your working directory
+# ==============================================================================
+
+# Internal inference gateway or corporate LLM endpoint (must include /v1)
+GATEWAY_URL="https://your-internal-llm-gateway/v1"
+
+# Target model tag or deployment name
+MODEL_NAME="qwen/qwen-2.5-72b-instruct"
+
+# API Token or Bearer token (leave empty or mock if no token needed)
+API_TOKEN="sk-custom-secret"
+
+# Internal core service port (defaults to 8642)
+API_PORT="8642"

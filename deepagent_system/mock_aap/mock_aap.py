@@ -127,6 +127,7 @@ JOB_TEMPLATES = [
     {"id": 126, "name": "Get Server Info"},
     {"id": 127, "name": "Check Host Online"},
     {"id": 128, "name": "VMware VM Reset"},
+    {"id": 129, "name": "Get Maintenance Window Hosts"},
 ]
 
 @app.route('/api/v2/job_templates', methods=['GET'])
@@ -271,6 +272,20 @@ def get_job_stdout(job_id):
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
+        return "\n".join(lines)
+
+    # 2b. Maintenance Block-Window Dynamic Discovery
+    if template_id == 129:
+        w_tag = extra_vars.get("window_tag") or "window_active"
+        lines = [f"PLAY [Evaluate Dynamic Maintenance Block Window Hosts ({len(targets)} Targets)] *******"]
+        lines.append("TASK [Filter Hosts Eligible for Current Maintenance Block Window] ***************")
+        for t in targets:
+            lines.append(
+                f"ok: [{t}] => {{ \"msg\": \"STATUS: INVENTORY_FILTERED. Host: {t}. Eligible: true. Assigned Window: {w_tag}. OS: Red Hat Enterprise Linux 9.4. Running Kernel: 5.14.0-427.el9.x86_64.\" }}"
+            )
+        lines.append("\nPLAY RECAP *********************************************************************")
+        for t in targets:
+            lines.append(f"{t:30} : ok=2    changed=0    unreachable=0    failed=0")
         return "\n".join(lines)
 
     # 3. Patch Fleet (Simulate Clean Updates vs DNF Transaction Failure)

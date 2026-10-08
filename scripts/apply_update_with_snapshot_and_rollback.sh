@@ -22,16 +22,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 UPDATE_SCRIPT="${1:-${SCRIPT_DIR}/inspect_and_fix_mcp_timeout.sh}"
-COMMIT_MSG="${2:-fix(mcp): configure 1-hour timeout in MultiServerMCPClient for long-running playbooks}"
 SNAPSHOT_TOOL="${SCRIPT_DIR}/pod_snapshot_and_test.sh"
 SNAPSHOT_TAG="pre_update_$(date +%Y%m%d_%H%M%S)"
 
 echo -e "${CYAN}${BOLD}==============================================================================${NC}"
-echo -e "${CYAN}${BOLD}  🛡️ SAFE UPDATE PIPELINE: SNAPSHOT -> UPDATE -> TEST -> COMMIT / ROLLBACK     ${NC}"
+echo -e "${CYAN}${BOLD}  🛡️ SAFE UPDATE PIPELINE: PODMAN SNAPSHOT -> UPDATE -> TEST -> PODMAN COMMIT  ${NC}"
 echo -e "${CYAN}${BOLD}==============================================================================${NC}"
 echo -e "  • Update Target Script : ${BOLD}${UPDATE_SCRIPT}${NC}"
 echo -e "  • Snapshot Identifier  : ${BOLD}${SNAPSHOT_TAG}${NC}"
-echo -e "  • Target Commit Msg    : ${BOLD}${COMMIT_MSG}${NC}"
 
 # Check prerequisites
 if [ ! -f "$UPDATE_SCRIPT" ]; then
@@ -83,31 +81,34 @@ fi
 echo -e "${GREEN}✓ All post-update smoke test gates passed successfully.${NC}"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Step 4: Create Successful Git Commit
+# Step 4: Podman Commit (Seal Verified Production Container State)
 # ──────────────────────────────────────────────────────────────────────────────
-echo -e "\n${BOLD}[4/4] Finalizing & Recording Git Commit...${NC}"
-cd "${REPO_ROOT}"
+echo -e "\n${BOLD}[4/4] Finalizing & Creating Verified Podman Production Commits...${NC}"
 
-# Stage the updated files
-git add deepagent_system/app/mcp_client.py \
-        scripts/inspect_and_fix_mcp_timeout.sh \
-        scripts/pod_snapshot_and_test.sh \
-        scripts/apply_update_with_snapshot_and_rollback.sh \
-        scripts/build_airgap_release.sh 2>/dev/null || true
+CRITICAL_CONTAINERS=(
+    "deepagent-service"
+    "deepagent-proxy"
+    "deepagent-webui"
+    "deepagent-ansible-mcp"
+    "deepagent-sop-mcp"
+)
 
-# Check if there is anything to commit
-if git diff --staged --quiet; then
-    echo -e "  ${YELLOW}ℹ️ No new code changes to commit (working tree matches index).${NC}"
-else
-    git commit -m "${COMMIT_MSG}"
-    COMMIT_HASH=$(git rev-parse --short HEAD)
-    echo -e "  ${GREEN}✓ Git commit created successfully: [${COMMIT_HASH}]${NC}"
-fi
+PROD_TAG="verified_$(date +%Y%m%d_%H%M%S)"
+
+for c in "${CRITICAL_CONTAINERS[@]}"; do
+    if podman ps --format "{{.Names}}" | grep -q "^${c}$"; then
+        echo -n "  📦 Podman committing $c -> localhost/${c}:${PROD_TAG} ... "
+        podman commit "$c" "localhost/${c}:${PROD_TAG}" >/dev/null
+        podman tag "localhost/${c}:${PROD_TAG}" "localhost/${c}:latest" >/dev/null 2>&1 || true
+        echo -e "${GREEN}✓ Done${NC}"
+    fi
+done
 
 echo -e "\n${GREEN}${BOLD}==============================================================================${NC}"
 echo -e "${GREEN}${BOLD}  🎉 UPDATE PIPELINE COMPLETED SUCCESSFULLY!                                  ${NC}"
 echo -e "${GREEN}${BOLD}==============================================================================${NC}"
-echo -e "  • Snapshot : [backup-${SNAPSHOT_TAG}] preserved"
-echo -e "  • Status   : Production containers verified healthy"
-echo -e "  • Commit   : $(git log -n 1 --oneline)"
+echo -e "  • Pre-Update Backup  : localhost/*:backup-${SNAPSHOT_TAG}"
+echo -e "  • Verified Prod Tag  : localhost/*:${PROD_TAG}"
+echo -e "  • Container Status   : All production containers verified healthy"
 echo -e "${GREEN}${BOLD}==============================================================================${NC}\n"
+

@@ -1,0 +1,22 @@
+# ==============================================================================
+# Deep Agent Gateway & TLS Configuration
+# ==============================================================================
+# Set your enterprise inference gateway endpoint (must include /v1)
+GATEWAY_URL="https://your-internal-llm-gateway/v1"
+
+# Model name / deployment tag
+MODEL_NAME="qwen/qwen-2.5-72b-instruct"
+
+# Bearer Token / API Key
+API_TOKEN="sk-custom-secret"
+
+# Internal core service port
+API_PORT="8642"
+
+# AAP Mode: "mock" for local simulation or "prd" for real enterprise AAP
+AAP_MODE="mock"
+AAP_HOST=""
+AAP_TOKEN=""
+
+# Optional: Path to custom enterprise CA certificate to trust
+# CA_CERT_PATH="/opt/td-agent/certs/enterprise_ca.crt"

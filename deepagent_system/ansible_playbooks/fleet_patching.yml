@@ -1,15 +1,29 @@
 ---
+# ==============================================================================
+# Playbook: fleet_patching.yml
+# Purpose: Enterprise DNF/YUM Security & System Package Updates with
+#          Dynamic Kernel Update & Reboot-Required Detection
+# ==============================================================================
 - name: Apply Enterprise DNF/YUM Security & System Packages
   hosts: "{{ hostlist | default('all') }}"
   gather_facts: true
   tasks:
     - name: Package Patching Block
       block:
-        - name: Capture Pre-Patch Kernel & System Info
+        # 1. Capture Pre-Patch Running Kernel
+        - name: Capture Pre-Patch Running Kernel
           ansible.builtin.command: uname -r
           register: pre_kernel
           changed_when: false
 
+        # 2. Capture Pre-Patch Installed Kernel Package
+        - name: Capture Pre-Patch Installed Kernel Package
+          ansible.builtin.shell: "rpm -q --last kernel | head -n 1 | awk '{print $1}'"
+          register: pre_kernel_pkg
+          changed_when: false
+          failed_when: false
+
+        # 3. Apply Package Updates via DNF / YUM
         - name: Apply Package Updates via DNF
           ansible.builtin.dnf:
             name: "*"
@@ -18,30 +32,66 @@
             security: false
           register: dnf_result
 
-        - name: Detect If Kernel Was Updated
-          ansible.builtin.command: rpm -q --last kernel | head -n 1
+        # 4. Check Post-Patch Latest Installed Kernel Package
+        - name: Check Post-Patch Installed Kernel Package
+          ansible.builtin.shell: "rpm -q --last kernel | head -n 1 | awk '{print $1}'"
           register: post_kernel_pkg
           changed_when: false
+          failed_when: false
 
+        # 5. Check if system indicates reboot is needed via needs-restarting (RHEL 7/8/9)
+        - name: Check System Reboot Requirement via needs-restarting
+          ansible.builtin.command: needs-restarting -r
+          register: needs_restarting_cmd
+          changed_when: false
+          failed_when: false
+
+        # 6. Evaluate Kernel Update & Reboot Requirement
+        - name: Determine Kernel Update and Reboot Status
+          vars:
+            # Kernel was updated if newest rpm != pre-patch rpm OR running kernel != newest installed kernel
+            kernel_was_updated: "{{ (post_kernel_pkg.stdout | default('')) != (pre_kernel_pkg.stdout | default('')) or (pre_kernel.stdout not in (post_kernel_pkg.stdout | default(''))) }}"
+            # Reboot required if kernel changed OR needs-restarting returned exit code 1
+            reboot_needed: "{{ kernel_was_updated | bool or (needs_restarting_cmd.rc | default(0) == 1) }}"
+          ansible.builtin.set_fact:
+            is_kernel_updated: "{{ kernel_was_updated }}"
+            is_reboot_required: "{{ reboot_needed }}"
+            packages_changed_count: "{{ dnf_result.results | default([]) | length if (dnf_result.results is defined) else (1 if dnf_result.changed else 0) }}"
+
+        # 7. Report Clean Success Status with Explicit need_to_restart Signal for AI Agent
         - name: Report Patching Results
           ansible.builtin.debug:
-            msg: >
-              STATUS: SUCCESS.
-              Host: {{ inventory_hostname }}.
-              Pre-Kernel: {{ pre_kernel.stdout }}.
-              Packages Updated: {{ dnf_result.results | default([]) | length }}.
-              Latest Installed Kernel Package: {{ post_kernel_pkg.stdout }}.
+            msg:
+              STATUS: "SUCCESS"
+              host: "{{ inventory_hostname }}"
+              kernel_updated: "{{ is_kernel_updated | bool }}"
+              need_to_restart: "{{ is_reboot_required | bool }}"
+              reboot_required: "{{ is_reboot_required | bool }}"
+              reboot_reason: >-
+                {% if is_kernel_updated | bool %}
+                  New kernel installed ({{ post_kernel_pkg.stdout | default('kernel') }}). Reboot required to activate.
+                {% elif is_reboot_required | bool %}
+                  Core libraries or system daemons updated (needs-restarting flag). Reboot recommended.
+                {% else %}
+                  No kernel update and no core library restart required. Host can remain online without reboot.
+                {% endif %}
+              running_kernel: "{{ pre_kernel.stdout }}"
+              latest_installed_kernel: "{{ post_kernel_pkg.stdout | default('N/A') }}"
+              packages_updated_count: "{{ packages_changed_count }}"
 
       rescue:
         - name: Capture DNF Failure Log
           ansible.builtin.command: tail -n 25 /var/log/dnf.log
           register: dnf_log
           ignore_errors: true
+          changed_when: false
 
         - name: Report Patching Error to Deep Agent
           ansible.builtin.fail:
-            msg: >
-              STATUS: FAILED.
-              Action: Patch Fleet on {{ inventory_hostname }}.
-              DNF Error: {{ dnf_result.msg | default('Package transaction failed') }}.
-              Log Extract: {{ dnf_log.stdout | default('Unable to read /var/log/dnf.log') }}.
+            msg:
+              STATUS: "FAILED"
+              action: "Patch Fleet on {{ inventory_hostname }}"
+              dnf_error: "{{ dnf_result.msg | default('Package transaction failed') }}"
+              log_extract: "{{ dnf_log.stdout | default('Unable to read /var/log/dnf.log') }}"
+              need_to_restart: false
+              reboot_required: false

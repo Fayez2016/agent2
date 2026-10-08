@@ -1,15 +1,23 @@
 #!/bin/bash
 # ==============================================================================
-#  Deploy Updated Ansible FastMCP Server (with AAP 2.6 Endpoint Support & Aliases)
+#  Deploy Updated Ansible FastMCP Server (Universal hostlist & hostname support)
 # ==============================================================================
 set -eo pipefail
 
 echo "=============================================================================="
-echo " 🚀 Updating deepagent-ansible-mcp with AAP 2.6 Support & Restarting Container"
+echo " 🚀 Updating deepagent-ansible-mcp with All Template Variable Fixes"
 echo "=============================================================================="
 
-podman exec -i -u 0 deepagent-ansible-mcp bash << 'IN_CONTAINER_EOF'
-cat << 'PY_EOF' > /app/ansible_mcp_server.py
+# Ensure container exists
+if ! podman ps -a --format "{{.Names}}" | grep -q "deepagent-ansible-mcp"; then
+    echo "❌ Error: Container 'deepagent-ansible-mcp' not found."
+    exit 1
+fi
+
+TMP_FILE="$(mktemp /tmp/ansible_mcp_XXXXXX.py)"
+trap 'rm -f "${TMP_FILE}"' EXIT
+
+cat << 'PY_EOF' > "${TMP_FILE}"
 import os
 import json
 import requests
@@ -193,27 +201,33 @@ def extract_debug_msg(stdout: str) -> Optional[str]:
     return None
 
 TEMPLATE_ALIASES = {
-    "Get Server Info": ["Get Server Info", "Check Host Online", "Server Info"],
-    "Check Host Online": ["Check Host Online", "Get Server Info"],
-    "Reboot Host": ["Reboot Host", "Fleet Reboot", "Managed Reboot"],
-    "Reboot Fleet": ["Reboot Fleet", "Fleet Reboot"],
-    "Patch Fleet": ["Patch Fleet", "Fleet Patching"],
-    "PCS Health Check": ["PCS Health Check", "HA Cluster Health Check"],
-    "PCS Status": ["PCS Status", "HA Cluster Health Check"],
-    "PCS Node Standby": ["PCS Node Standby", "HA Cluster Node Standby"],
-    "PCS Node Unstandby": ["PCS Node Unstandby", "HA Cluster Node Unstandby"],
-    "Fix PCS Cluster": ["Fix PCS Cluster", "PCS Fix Cluster"],
-    "Console Power On": ["Console Power On", "Console Power On IPMI"],
-    "Limited Run Any Command": ["Limited Run Any Command", "Run Command", "Emergency Shell Command"],
-    "Expand Filesystem": ["Expand Filesystem", "Expand FS"],
+    "Get Server Info": ["Get Server Info", "Check Host Online", "Server Info", "check_host_online", "get_server_info"],
+    "Check Host Online": ["Check Host Online", "Get Server Info", "check_host_online"],
+    "Reboot Host": ["Reboot Host", "Fleet Reboot", "Managed Reboot", "reboot_host", "fleet_reboot"],
+    "Reboot Fleet": ["Reboot Fleet", "Fleet Reboot", "fleet_reboot", "reboot_fleet"],
+    "Patch Fleet": ["Patch Fleet", "Fleet Patching", "fleet_patching", "patch_fleet"],
+    "PCS Health Check": ["PCS Health Check", "HA Cluster Health Check", "ha_cluster_health_check", "pcs_cluster_health_check", "pcs_health_check"],
+    "PCS Status": ["PCS Status", "HA Cluster Health Check", "pcs_status", "pcs_health_check"],
+    "PCS Node Standby": ["PCS Node Standby", "HA Cluster Node Standby", "ha_cluster_node_standby", "pcs_node_standby"],
+    "PCS Node Unstandby": ["PCS Node Unstandby", "HA Cluster Node Unstandby", "ha_cluster_node_unstandby", "pcs_node_unstandby"],
+    "Fix PCS Cluster": ["Fix PCS Cluster", "PCS Fix Cluster", "pcs_fix_cluster"],
+    "Console Power On": ["Console Power On", "Console Power On IPMI", "console_power_on_ipmi", "IPMI Power On", "IPMI Chassis Power", "ipmi_power_on", "ipmi"],
+    "Limited Run Any Command": ["Limited Run Any Command", "Run Command", "Emergency Shell Command", "run_shell_command", "run_command"],
+    "Expand Filesystem": ["Expand Filesystem", "Expand FS", "expand_filesystem"],
+    "HA Rolling Update": ["HA Rolling Update", "ha_cluster_rolling_update", "rolling_update"],
+    "Send Email Notification": ["Send Email Notification", "send_email_notification", "send_email"],
+    "VMware VM Reset": ["VMware VM Reset", "vmware_vm_reset"]
 }
+
+def normalize_name(s: str) -> str:
+    """Normalizes names by stripping non-alphanumerics and converting to lowercase."""
+    return re.sub(r'[^a-z0-9]', '', str(s).lower())
 
 def get_aap_api_base(aap_host: str, headers: dict) -> str:
     """Detects whether AAP uses the new /api/controller/v2/ (AAP 2.4/2.5/2.6) or legacy /api/v2/."""
     clean_host = aap_host.replace("https://", "").replace("http://", "").strip().rstrip("/")
     protocol = "http" if ("localhost" in clean_host or "127.0.0.1" in clean_host or "aap-server" in clean_host) else "https"
     
-    # Try the modern AAP 2.4/2.6 controller endpoint first
     controller_base = f"{protocol}://{clean_host}/api/controller/v2"
     legacy_base = f"{protocol}://{clean_host}/api/v2"
     
@@ -243,27 +257,64 @@ def find_job_template(template_name: str, headers: dict, aap_host: str, api_base
     if template_name not in candidates:
         candidates.insert(0, template_name)
 
-    for base in [api_base, api_base.replace("/api/controller/v2", "/api/v2") if "/controller" in api_base else api_base.replace("/api/v2", "/api/controller/v2")]:
+    norm_candidates = {normalize_name(c) for c in candidates}
+
+    endpoints = [api_base]
+    alt_base = api_base.replace("/api/controller/v2", "/api/v2") if "/controller" in api_base else api_base.replace("/api/v2", "/api/controller/v2")
+    if alt_base not in endpoints:
+        endpoints.append(alt_base)
+
+    for base in endpoints:
+        # 1. Fast path: Direct query with trailing slash
         for cand in candidates:
             try:
-                url = f"{base}/job_templates"
-                resp = requests.get(url, headers=get_headers, params={"name": cand}, verify=False)
+                url = f"{base}/job_templates/"
+                resp = requests.get(url, headers=get_headers, params={"name": cand}, verify=False, timeout=5)
                 if resp.status_code == 200:
                     results = resp.json().get("results", [])
                     if results:
-                        logger.info(f"Resolved '{template_name}' to AAP Job Template '{cand}' (ID {results[0]['id']}) via {base}")
+                        logger.info(f"Resolved '{template_name}' to AAP Job Template '{results[0]['name']}' (ID {results[0]['id']}) via {base}")
                         return results[0]["id"], base
+                elif resp.status_code >= 400:
+                    logger.warning(f"AAP template query for '{cand}' returned {resp.status_code}: {resp.text}")
             except Exception as e:
                 logger.warning(f"Error querying template '{cand}' on {base}: {e}")
 
-    raise ValueError(f"Template '{template_name}' (or aliases {candidates}) not found on AAP ({api_base}).")
+        # 2. Resilient path: Fetch template list and match via normalized fuzzy lookup
+        try:
+            url = f"{base}/job_templates/"
+            resp = requests.get(url, headers=get_headers, params={"page_size": 200}, verify=False, timeout=8)
+            if resp.status_code == 200:
+                all_templates = resp.json().get("results", [])
+                for item in all_templates:
+                    item_name = item.get("name", "")
+                    norm_item = normalize_name(item_name)
+                    # Match exact normalized or substring (e.g. '03 - Fleet Reboot' matches 'fleetreboot')
+                    if norm_item in norm_candidates or any(c in norm_item or norm_item in c for c in norm_candidates):
+                        logger.info(f"Fuzzy-matched '{template_name}' to AAP Job Template '{item_name}' (ID {item['id']}) via {base}")
+                        return item["id"], base
+
+                discovered = [t.get("name") for t in all_templates[:25]]
+                logger.info(f"AAP available templates on {base} ({len(all_templates)} total): {discovered}")
+            elif resp.status_code >= 400:
+                logger.warning(f"AAP template catalog query returned {resp.status_code}: {resp.text}")
+        except Exception as e:
+            logger.warning(f"Error fetching template catalog on {base}: {e}")
+
+    raise ValueError(f"Template '{template_name}' (aliases: {candidates}) not found on AAP ({api_base}).")
 
 def launch_job(template_id: int, extra_vars: dict, headers: dict, api_base: str) -> int:
     url = f"{api_base}/job_templates/{template_id}/launch/"
     payload = {"extra_vars": extra_vars}
-    resp = requests.post(url, headers=headers, json=payload, verify=False)
+    resp = requests.post(url, headers=headers, json=payload, verify=False, timeout=15)
+    if resp.status_code >= 400:
+        raise RuntimeError(f"AAP Job Launch Failed ({resp.status_code}) on {url}: {resp.text}")
     resp.raise_for_status()
-    return resp.json()["job"]
+    data = resp.json()
+    job_id = data.get("id") or data.get("job")
+    if not job_id:
+        raise ValueError(f"No job ID returned in AAP launch response: {data}")
+    return int(job_id)
 
 def wait_for_completion(job_id: int, headers: dict, api_base: str) -> str:
     while True:
@@ -371,55 +422,55 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any], is_hig
 @mcp.tool()
 def ansible_get_server_info(hostlist: str) -> str:
     """Retrieve inventory information (HA status, planned reboot) for a list of servers."""
-    return run_ansible_job_logic("Get Server Info", {"hostlist": hostlist})
+    return run_ansible_job_logic("Get Server Info", {"hostlist": hostlist, "hostname": hostlist})
 
 @mcp.tool()
 def ansible_pcs_node_standby(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Puts a specific cluster node or list of cluster nodes in STANDBY mode to migrate resources off."""
-    return run_ansible_job_logic("PCS Node Standby", {"hostlist": hostlist}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Node Standby", {"hostlist": hostlist, "hostname": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_node_unstandby(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Takes a specific cluster node or list of cluster nodes out of STANDBY mode."""
-    return run_ansible_job_logic("PCS Node Unstandby", {"hostlist": hostlist}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Node Unstandby", {"hostlist": hostlist, "hostname": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_stop(hostname: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Stops the cluster software (Pacemaker/Corosync) on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Stop", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Cluster Stop", {"hostname": hostname, "hostlist": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_start(hostname: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Starts the cluster software (Pacemaker/Corosync) on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Start", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Cluster Start", {"hostname": hostname, "hostlist": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_disable(hostname: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Disables the cluster services from starting at boot on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Disable", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Cluster Disable", {"hostname": hostname, "hostlist": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_enable(hostname: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Enables the cluster services to start at boot on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Enable", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Cluster Enable", {"hostname": hostname, "hostlist": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_patch_fleet(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Apply security patches to a fleet or list of servers (no reboot)."""
-    return run_ansible_job_logic("Patch Fleet", {"hostlist": hostlist}, is_high_risk=True)
+    return run_ansible_job_logic("Patch Fleet", {"hostlist": hostlist, "hostname": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_reboot_fleet(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Reboot a fleet or list of servers."""
-    return run_ansible_job_logic("Reboot Fleet", {"hostlist": hostlist}, is_high_risk=True)
+    return run_ansible_job_logic("Reboot Fleet", {"hostlist": hostlist, "hostname": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_maintenance_mode(enable: bool) -> str:
@@ -432,7 +483,7 @@ def ansible_pcs_maintenance_mode(enable: bool) -> str:
 def ansible_pcs_resource_move(resource_id: str, target_node: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Manually move a cluster resource to a specific node."""
-    return run_ansible_job_logic("PCS Resource Move", {"resource_id": resource_id, "target_node": target_node}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Resource Move", {"resource_id": resource_id, "target_node": target_node, "hostname": target_node, "hostlist": target_node}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_resource_clear(resource_id: str) -> str:
@@ -444,35 +495,35 @@ def ansible_pcs_resource_clear(resource_id: str) -> str:
 def ansible_reboot_host(hostname: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Reboot a single remote host."""
-    return run_ansible_job_logic("Reboot Host", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("Reboot Host", {"hostname": hostname, "hostlist": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_vmware_reset(vm_name: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Hard reset a VM via VMware API."""
-    return run_ansible_job_logic("VMware VM Reset", {"vm_name": vm_name}, is_high_risk=True)
+    return run_ansible_job_logic("VMware VM Reset", {"vm_name": vm_name, "hostname": vm_name, "hostlist": vm_name}, is_high_risk=True)
 
 # Standard tools (No HITL required)
 
 @mcp.tool()
 def ansible_install_package(hostname: str, package_name: str) -> str:
     """Installs a system package via DNF/YUM on a remote host."""
-    return run_ansible_job_logic("Install Package", {"hostname": hostname, "package_name": package_name})
+    return run_ansible_job_logic("Install Package", {"hostname": hostname, "hostlist": hostname, "package_name": package_name})
 
 @mcp.tool()
 def ansible_expand_fs(hostname: str, mount_point: str) -> str:
     """Expands a remote filesystem (LVM/XFS) on a specific host."""
-    return run_ansible_job_logic("Expand Filesystem", {"hostname": hostname, "mount_point": mount_point})
+    return run_ansible_job_logic("Expand Filesystem", {"hostname": hostname, "hostlist": hostname, "mount_point": mount_point})
 
 @mcp.tool()
 def ansible_fix_pcs(hostname: str) -> str:
     """Fix/Cleanup PCS cluster resources on a specific node."""
-    return run_ansible_job_logic("Fix PCS Cluster", {"hostname": hostname})
+    return run_ansible_job_logic("Fix PCS Cluster", {"hostname": hostname, "hostlist": hostname})
 
 @mcp.tool()
 def ansible_pcs_status(hostlist: str) -> str:
     """Retrieves the basic PCS Cluster health status from a list of nodes/clusters."""
-    return run_ansible_job_logic("PCS Status", {"hostlist": hostlist})
+    return run_ansible_job_logic("PCS Status", {"hostlist": hostlist, "hostname": hostlist})
 
 @mcp.tool()
 def ansible_send_email(recipient: str, subject: str, body: str) -> str:
@@ -482,34 +533,34 @@ def ansible_send_email(recipient: str, subject: str, body: str) -> str:
 @mcp.tool()
 def ansible_pcs_health_check(hostlist: str) -> str:
     """Retrieves a comprehensive health check for PCS clusters from a list of hosts/clusters."""
-    return run_ansible_job_logic("PCS Health Check", {"hostlist": hostlist})
+    return run_ansible_job_logic("PCS Health Check", {"hostlist": hostlist, "hostname": hostlist})
 
 @mcp.tool()
 def ansible_pcs_cib_upgrade(hostname: str) -> str:
     """Upgrades the Cluster Information Base (CIB) to the latest supported version."""
-    return run_ansible_job_logic("PCS CIB Upgrade", {"hostname": hostname})
+    return run_ansible_job_logic("PCS CIB Upgrade", {"hostname": hostname, "hostlist": hostname})
 
 @mcp.tool()
 def ansible_pcs_constraint_list(hostname: str) -> str:
     """Retrieves the list of location constraints for the cluster."""
-    return run_ansible_job_logic("PCS Constraint List", {"hostname": hostname})
+    return run_ansible_job_logic("PCS Constraint List", {"hostname": hostname, "hostlist": hostname})
 
 @mcp.tool()
 def ansible_check_host_online(hostlist: str) -> str:
     """Verifies that remote hosts are online and reachable on SSH port 22 after reboot."""
-    return run_ansible_job_logic("Check Host Online", {"hostlist": hostlist})
+    return run_ansible_job_logic("Check Host Online", {"hostlist": hostlist, "hostname": hostlist})
 
 @mcp.tool()
 def ansible_console_power_on(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Brings up an unresponsive server via out-of-band management console / IPMI."""
-    return run_ansible_job_logic("Console Power On", {"hostlist": hostlist}, is_high_risk=True)
+    return run_ansible_job_logic("Console Power On", {"hostlist": hostlist, "hostname": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_run_command(command: str, hostname: str) -> str:
     """Executes a shell command on a remote host via Ansible AAP. 
     High-risk maintenance tool requiring human approval gate."""
-    return run_ansible_job_logic("Limited Run Any Command", {"hostlist": hostname, "command": command, "agent_comand": command}, is_high_risk=True)
+    return run_ansible_job_logic("Limited Run Any Command", {"hostlist": hostname, "hostname": hostname, "command": command, "agent_comand": command}, is_high_risk=True)
 
 if __name__ == "__main__":
     mcp.settings.host = "0.0.0.0"
@@ -520,22 +571,22 @@ if __name__ == "__main__":
     mcp.run(transport="streamable-http")
 
 PY_EOF
-IN_CONTAINER_EOF
 
-echo "✓ Updated /app/ansible_mcp_server.py inside deepagent-ansible-mcp."
+echo ">>> Copying updated ansible_mcp_server.py into container deepagent-ansible-mcp..."
+podman cp "${TMP_FILE}" deepagent-ansible-mcp:/app/ansible_mcp_server.py
 
-echo "Restarting deepagent-ansible-mcp container..."
+echo ">>> Restarting deepagent-ansible-mcp container..."
 podman restart deepagent-ansible-mcp >/dev/null
 
-echo "Waiting for container to become healthy..."
+echo ">>> Waiting 3 seconds for container to initialize..."
 sleep 3
 
 if podman ps --filter name=deepagent-ansible-mcp --filter status=running | grep -q deepagent-ansible-mcp; then
     echo "=============================================================================="
-    echo " 🎉 SUCCESS: deepagent-ansible-mcp is running with AAP 2.6 support!"
+    echo " 🎉 SUCCESS: deepagent-ansible-mcp is restarted and running with updated code!"
     echo "=============================================================================="
 else
     echo "⚠️ Warning: Container did not stay up. Checking logs:"
-    podman logs --tail 20 deepagent-ansible-mcp
+    podman logs --tail 25 deepagent-ansible-mcp
     exit 1
 fi

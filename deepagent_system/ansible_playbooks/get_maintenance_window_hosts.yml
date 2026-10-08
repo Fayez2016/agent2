@@ -1,0 +1,251 @@
+---
+# ==============================================================================
+# Playbook: get_maintenance_window_hosts.yml
+# Architecture: Single-Play Controller (100% Localhost / AAP Execution Node)
+# Purpose: AI Agent Discovery & Pre-flight Orchestration Engine
+# ==============================================================================
+- name: Evaluate Maintenance Window Targets Locally with Schedule Gating & CMDB
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    # --------------------------------------------------------------------------
+    # Runtime Arguments / Extra Vars
+    # --------------------------------------------------------------------------
+    active_target_group: "{{ target_group | default('all') }}"
+    requested_phase: "{{ window_tag | default('Linux_DEV') }}"
+    target_wave: "{{ wave | default('wave1') }}"
+    allow_window_override: "{{ force_window | default(false) | bool }}"
+    exclude_hosts: "{{ exclude_servers | default(excluded_hosts | default([])) }}"
+
+    # --------------------------------------------------------------------------
+    # 1. CMDB Attribute Exclusion Denylist
+    # Add any noisy CMDB hostvars here that the AI Agent should NOT see.
+    # --------------------------------------------------------------------------
+    cmdb_excluded_keys:
+      - "CMDB_raw_payload"
+      - "cmdb_sync_timestamp"
+      - "CMDB_internal_id"
+      - "cmdb_last_discovered"
+      - "CMDB_cost_center_code"
+
+    # --------------------------------------------------------------------------
+    # 2. Window Schedule & Timing Policy Matrix
+    # Add new phase tags and their respective maintenance schedules here.
+    # Supported types: always_open, time_gated, split_window, override_only
+    # Supported days: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
+    # --------------------------------------------------------------------------
+    maintenance_schedules:
+      Linux_DEV:
+        type: "always_open"
+        description: "Development fleet. Permitted at any time."
+
+      Linux_NB_W1:
+        type: "time_gated"
+        description: "Non-Business Wave 1. Tuesday 18:00 to 23:59."
+        allowed_days: ["Tuesday"]
+        start_hour: 18
+        end_hour: 23
+
+      Linux_NB_W2:
+        type: "time_gated"
+        description: "Non-Business Wave 2. Wednesday 18:00 to 23:59."
+        allowed_days: ["Wednesday"]
+        start_hour: 18
+        end_hour: 23
+
+      Linux_PRD_W1:
+        type: "split_window"
+        description: "Production Wave 1. Thursday 22:00 through Friday 06:00."
+        windows:
+          - day: "Thursday"
+            start_hour: 22
+            end_hour: 23
+          - day: "Friday"
+            start_hour: 0
+            end_hour: 6
+
+      Linux_PRD_W2:
+        type: "time_gated"
+        description: "Production Wave 2. Friday 13:00 to 18:00."
+        allowed_days: ["Friday"]
+        start_hour: 13
+        end_hour: 18
+
+      ALL:
+        type: "override_only"
+        description: "Audit mode. Requires explicit force_window=true flag."
+
+  tasks:
+    # --------------------------------------------------------------------------
+    # 1. System Time & Input Normalization
+    # --------------------------------------------------------------------------
+    - name: Gather Controller Time Facts
+      ansible.builtin.setup:
+        filter: "ansible_date_time"
+
+    - name: Normalize Target Inputs & Exclusion List
+      ansible.builtin.set_fact:
+        normalized_exclude_list: >-
+          {% if exclude_hosts is string %}
+            {{ exclude_hosts.split(',') | map('trim') | reject('equalto', '') | list }}
+          {% elif exclude_hosts is iterable %}
+            {{ exclude_hosts | list }}
+          {% else %}
+            []
+          {% endif %}
+        cur_weekday: "{{ ansible_date_time.weekday }}"
+        cur_hour: "{{ ansible_date_time.hour | int }}"
+        selected_schedule: "{{ maintenance_schedules[requested_phase] | default({}) }}"
+
+    # --------------------------------------------------------------------------
+    # 2. Dynamic Schedule Evaluation
+    # --------------------------------------------------------------------------
+    - name: Evaluate Schedule Gating
+      vars:
+        sched: "{{ selected_schedule }}"
+      ansible.builtin.set_fact:
+        window_is_open: >-
+          {{
+            allow_window_override or
+            (sched.type | default('') == 'always_open') or
+            (sched.type | default('') == 'time_gated' and cur_weekday in (sched.allowed_days | default([])) and cur_hour >= sched.start_hour and cur_hour <= sched.end_hour) or
+            (sched.type | default('') == 'split_window' and (
+              sched.windows | default([]) | selectattr('day', 'equalto', cur_weekday) | selectattr('start_hour', '<=', cur_hour) | selectattr('end_hour', '>=', cur_hour) | list | length > 0
+            ))
+          }}
+
+    # --------------------------------------------------------------------------
+    # 3. Inventory Resolution & Filtering
+    # --------------------------------------------------------------------------
+    - name: Read Active Inventory
+      ansible.builtin.set_fact:
+        targeted_server_list: "{{ groups[active_target_group] | default([]) }}"
+
+    - name: Filter Candidate Servers by CMDB_PatchPhases
+      when: window_is_open | bool
+      vars:
+        req_token: "{{ requested_phase | upper | replace('LINUX_', '') | replace('LINUX', '') | replace('_', '') | replace('-', '') }}"
+        processed_entries: >-
+          {% set filtered = [] %}
+          {% for h in targeted_server_list %}
+            {% if h not in normalized_exclude_list %}
+              {% set hvars = hostvars[h] | default({}) %}
+
+              {# Main Category Filter: CMDB_PatchPhases #}
+              {% set host_phase = (hvars.CMDB_PatchPhases | default(hvars.patch_phases | default(''))) | string %}
+
+              {# Sub-Grouping Identifier: CMDB_PatchCollectionID #}
+              {% set patch_coll = (hvars.CMDB_PatchCollectionID | default(hvars.patch_collection_id | default('STANDALONE_DEFAULT'))) | string %}
+
+              {# PCS Detection: Strictly True if HA or HANA exists in collection ID #}
+              {% set is_ha = ('HA' in patch_coll | upper) or ('HANA' in patch_coll | upper) %}
+              {% set category = 'SAP_HANA_PCS' if ('HANA' in patch_coll | upper) else ('RHEL_HA_PCS' if is_ha else 'STANDALONE_FLEET') %}
+
+              {# Phase Match Evaluation #}
+              {% set phase_clean = host_phase | upper | replace('LINUX_', '') | replace('LINUX', '') | replace('_', '') | replace('-', '') %}
+              {% set is_match = (requested_phase | upper == 'ALL')
+                             or (host_phase | upper == requested_phase | upper)
+                             or (requested_phase | upper in host_phase | upper)
+                             or (host_phase | upper in requested_phase | upper and host_phase | length >= 3)
+                             or (req_token in phase_clean and req_token | length >= 2)
+                             or (phase_clean in req_token and phase_clean | length >= 2) %}
+
+              {% if is_match %}
+                {# Filter CMDB attributes against cmdb_excluded_keys denylist #}
+                {% set sanitized_cmdb = {} %}
+                {% for k, v in hvars.items() %}
+                  {% if k.lower().startswith('cmdb_') and k not in cmdb_excluded_keys %}
+                    {% set _ = sanitized_cmdb.update({k: v}) %}
+                  {% endif %}
+                {% endfor %}
+
+                {% set _ = filtered.append({
+                  'host': h,
+                  'phase': host_phase,
+                  'collection_id': patch_coll,
+                  'wave': target_wave,
+                  'is_pcs_cluster': is_ha,
+                  'category': category,
+                  'cmdb': sanitized_cmdb
+                }) %}
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+          {{ filtered | to_json }}
+      ansible.builtin.set_fact:
+        eligible_hosts_data: "{{ processed_entries | from_json }}"
+
+    # --------------------------------------------------------------------------
+    # 4. Group Topology Construction
+    # --------------------------------------------------------------------------
+    - name: Aggregate Hosts by Collection Identifier
+      when: window_is_open | bool
+      vars:
+        grouped_dict: >-
+          {% set groups_map = {} %}
+          {% for entry in (eligible_hosts_data | default([])) %}
+            {% set cid = entry.collection_id %}
+            {% if cid not in groups_map %}
+              {% set _ = groups_map.update({cid: []}) %}
+            {% endif %}
+            {% set _ = groups_map[cid].append({
+              'host': entry.host,
+              'is_pcs_cluster': entry.is_pcs_cluster,
+              'category': entry.category,
+              'cmdb': entry.cmdb
+            }) %}
+          {% endfor %}
+          {{ groups_map | to_json }}
+      ansible.builtin.set_fact:
+        collections_matrix: "{{ grouped_dict | from_json }}"
+        pcs_cluster_hosts: >-
+          {{ (eligible_hosts_data | default([])) | selectattr('is_pcs_cluster', 'equalto', true) | map(attribute='host') | list }}
+        standalone_fleet_hosts: >-
+          {{ (eligible_hosts_data | default([])) | selectattr('is_pcs_cluster', 'equalto', false) | map(attribute='host') | list }}
+
+    # --------------------------------------------------------------------------
+    # 5. Clean AI Agent Outputs
+    # --------------------------------------------------------------------------
+    - name: Emit Window Rejected Signal to Agent
+      when: not (window_is_open | bool)
+      ansible.builtin.debug:
+        msg:
+          agent_action: "ABORT_SCHEDULE_LOCKED"
+          status: "WINDOW_CLOSED"
+          requested_phase: "{{ requested_phase }}"
+          system_time: "{{ cur_weekday }} {{ cur_hour }}:00 ({{ ansible_date_time.iso8601 }})"
+          rule_applied: "{{ selected_schedule.description | default('No schedule registered for this phase tag.') }}"
+
+    - name: Emit AI High-Level Discovery Summary
+      when: window_is_open | bool
+      ansible.builtin.debug:
+        msg:
+          agent_action: "EXECUTE_ORCHESTRATION"
+          status: "WINDOW_ACTIVE"
+          requested_phase: "{{ requested_phase }}"
+          wave: "{{ target_wave }}"
+          total_servers: "{{ (eligible_hosts_data | default([])) | length }}"
+          total_collections: "{{ (collections_matrix | default({})).keys() | list | length }}"
+          collections_list: "{{ (collections_matrix | default({})).keys() | list }}"
+          cluster_summary:
+            total_pcs_cluster_hosts: "{{ (pcs_cluster_hosts | default([])) | length }}"
+            total_standalone_hosts: "{{ (standalone_fleet_hosts | default([])) | length }}"
+            pcs_hosts: "{{ pcs_cluster_hosts | default([]) }}"
+            standalone_hosts: "{{ standalone_fleet_hosts | default([]) }}"
+          excluded_hosts_count: "{{ (normalized_exclude_list | default([])) | length }}"
+          excluded_hosts: "{{ normalized_exclude_list | default([]) }}"
+
+    - name: Emit Isolated Collection Block for Agent Execution
+      when: window_is_open | bool and ((collections_matrix | default({}) | length) > 0)
+      ansible.builtin.debug:
+        msg:
+          collection_id: "{{ item.key }}"
+          collection_server_count: "{{ item.value | length }}"
+          has_pcs_clusters: "{{ (item.value | selectattr('is_pcs_cluster', 'equalto', true) | list | length) > 0 }}"
+          cluster_nodes: "{{ item.value | selectattr('is_pcs_cluster', 'equalto', true) | map(attribute='host') | list }}"
+          standalone_nodes: "{{ item.value | selectattr('is_pcs_cluster', 'equalto', false) | map(attribute='host') | list }}"
+          hosts: "{{ item.value }}"
+      loop: "{{ collections_matrix | dict2items }}"
+      loop_control:
+        label: "Collection -> {{ item.key }} ({{ item.value | length }} hosts)"

@@ -195,6 +195,7 @@ TEMPLATE_ALIASES = {
     "Limited Run Any Command": ["Limited Run Any Command", "Run Command", "Emergency Shell Command", "run_shell_command", "run_command"],
     "Expand Filesystem": ["Expand Filesystem", "Expand FS", "expand_filesystem"],
     "HA Rolling Update": ["HA Rolling Update", "ha_cluster_rolling_update", "rolling_update"],
+    "Get Maintenance Window Hosts": ["Get Maintenance Window Hosts", "get_maintenance_window_hosts", "maintenance_hosts", "get_maintenance_hosts"],
     "Send Email Notification": ["Send Email Notification", "send_email_notification", "send_email"],
     "VMware VM Reset": ["VMware VM Reset", "vmware_vm_reset"]
 }
@@ -400,57 +401,66 @@ def run_ansible_job_logic(template_name: str, extra_vars: Dict[str, Any], is_hig
 # --- Batch-Ready Tool Definitions (Accepts hostlist / comma-separated lists) ---
 
 @mcp.tool()
+def ansible_get_maintenance_hosts(target_group: str = "all", window_tag: str = "") -> str:
+    """Discovers servers eligible for patching based on the scheduled maintenance block-window.
+    Returns filtered hostnames, operating system, kernel version, and assigned window."""
+    params = {"target_group": target_group, "hostlist": target_group, "hostname": target_group}
+    if window_tag:
+        params["window_tag"] = window_tag
+    return run_ansible_job_logic("Get Maintenance Window Hosts", params)
+
+@mcp.tool()
 def ansible_get_server_info(hostlist: str) -> str:
     """Retrieve inventory information (HA status, planned reboot) for a list of servers."""
-    return run_ansible_job_logic("Get Server Info", {"hostlist": hostlist})
+    return run_ansible_job_logic("Get Server Info", {"hostlist": hostlist, "hostname": hostlist})
 
 @mcp.tool()
 def ansible_pcs_node_standby(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Puts a specific cluster node or list of cluster nodes in STANDBY mode to migrate resources off."""
-    return run_ansible_job_logic("PCS Node Standby", {"hostlist": hostlist}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Node Standby", {"hostlist": hostlist, "hostname": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_node_unstandby(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Takes a specific cluster node or list of cluster nodes out of STANDBY mode."""
-    return run_ansible_job_logic("PCS Node Unstandby", {"hostlist": hostlist}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Node Unstandby", {"hostlist": hostlist, "hostname": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_stop(hostname: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Stops the cluster software (Pacemaker/Corosync) on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Stop", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Cluster Stop", {"hostname": hostname, "hostlist": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_start(hostname: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Starts the cluster software (Pacemaker/Corosync) on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Start", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Cluster Start", {"hostname": hostname, "hostlist": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_disable(hostname: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Disables the cluster services from starting at boot on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Disable", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Cluster Disable", {"hostname": hostname, "hostlist": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_cluster_enable(hostname: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Enables the cluster services to start at boot on a specific node."""
-    return run_ansible_job_logic("PCS Cluster Enable", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Cluster Enable", {"hostname": hostname, "hostlist": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_patch_fleet(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Apply security patches to a fleet or list of servers (no reboot)."""
-    return run_ansible_job_logic("Patch Fleet", {"hostlist": hostlist}, is_high_risk=True)
+    return run_ansible_job_logic("Patch Fleet", {"hostlist": hostlist, "hostname": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_reboot_fleet(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Reboot a fleet or list of servers."""
-    return run_ansible_job_logic("Reboot Fleet", {"hostlist": hostlist}, is_high_risk=True)
+    return run_ansible_job_logic("Reboot Fleet", {"hostlist": hostlist, "hostname": hostlist}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_maintenance_mode(enable: bool) -> str:
@@ -463,7 +473,7 @@ def ansible_pcs_maintenance_mode(enable: bool) -> str:
 def ansible_pcs_resource_move(resource_id: str, target_node: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Manually move a cluster resource to a specific node."""
-    return run_ansible_job_logic("PCS Resource Move", {"resource_id": resource_id, "target_node": target_node}, is_high_risk=True)
+    return run_ansible_job_logic("PCS Resource Move", {"resource_id": resource_id, "target_node": target_node, "hostname": target_node, "hostlist": target_node}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_pcs_resource_clear(resource_id: str) -> str:
@@ -475,35 +485,35 @@ def ansible_pcs_resource_clear(resource_id: str) -> str:
 def ansible_reboot_host(hostname: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Reboot a single remote host."""
-    return run_ansible_job_logic("Reboot Host", {"hostname": hostname}, is_high_risk=True)
+    return run_ansible_job_logic("Reboot Host", {"hostname": hostname, "hostlist": hostname}, is_high_risk=True)
 
 @mcp.tool()
 def ansible_vmware_reset(vm_name: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Hard reset a VM via VMware API."""
-    return run_ansible_job_logic("VMware VM Reset", {"vm_name": vm_name}, is_high_risk=True)
+    return run_ansible_job_logic("VMware VM Reset", {"vm_name": vm_name, "hostname": vm_name, "hostlist": vm_name}, is_high_risk=True)
 
 # Standard tools (No HITL required)
 
 @mcp.tool()
 def ansible_install_package(hostname: str, package_name: str) -> str:
     """Installs a system package via DNF/YUM on a remote host."""
-    return run_ansible_job_logic("Install Package", {"hostname": hostname, "package_name": package_name})
+    return run_ansible_job_logic("Install Package", {"hostname": hostname, "hostlist": hostname, "package_name": package_name})
 
 @mcp.tool()
 def ansible_expand_fs(hostname: str, mount_point: str) -> str:
     """Expands a remote filesystem (LVM/XFS) on a specific host."""
-    return run_ansible_job_logic("Expand Filesystem", {"hostname": hostname, "mount_point": mount_point})
+    return run_ansible_job_logic("Expand Filesystem", {"hostname": hostname, "hostlist": hostname, "mount_point": mount_point})
 
 @mcp.tool()
 def ansible_fix_pcs(hostname: str) -> str:
     """Fix/Cleanup PCS cluster resources on a specific node."""
-    return run_ansible_job_logic("Fix PCS Cluster", {"hostname": hostname})
+    return run_ansible_job_logic("Fix PCS Cluster", {"hostname": hostname, "hostlist": hostname})
 
 @mcp.tool()
 def ansible_pcs_status(hostlist: str) -> str:
     """Retrieves the basic PCS Cluster health status from a list of nodes/clusters."""
-    return run_ansible_job_logic("PCS Status", {"hostlist": hostlist})
+    return run_ansible_job_logic("PCS Status", {"hostlist": hostlist, "hostname": hostlist})
 
 @mcp.tool()
 def ansible_send_email(recipient: str, subject: str, body: str) -> str:
@@ -513,34 +523,49 @@ def ansible_send_email(recipient: str, subject: str, body: str) -> str:
 @mcp.tool()
 def ansible_pcs_health_check(hostlist: str) -> str:
     """Retrieves a comprehensive health check for PCS clusters from a list of hosts/clusters."""
-    return run_ansible_job_logic("PCS Health Check", {"hostlist": hostlist})
+    return run_ansible_job_logic("PCS Health Check", {"hostlist": hostlist, "hostname": hostlist})
 
 @mcp.tool()
 def ansible_pcs_cib_upgrade(hostname: str) -> str:
     """Upgrades the Cluster Information Base (CIB) to the latest supported version."""
-    return run_ansible_job_logic("PCS CIB Upgrade", {"hostname": hostname})
+    return run_ansible_job_logic("PCS CIB Upgrade", {"hostname": hostname, "hostlist": hostname})
 
 @mcp.tool()
 def ansible_pcs_constraint_list(hostname: str) -> str:
     """Retrieves the list of location constraints for the cluster."""
-    return run_ansible_job_logic("PCS Constraint List", {"hostname": hostname})
+    return run_ansible_job_logic("PCS Constraint List", {"hostname": hostname, "hostlist": hostname})
 
 @mcp.tool()
 def ansible_check_host_online(hostlist: str) -> str:
     """Verifies that remote hosts are online and reachable on SSH port 22 after reboot."""
-    return run_ansible_job_logic("Check Host Online", {"hostlist": hostlist})
+    return run_ansible_job_logic("Check Host Online", {"hostlist": hostlist, "hostname": hostlist})
 
 @mcp.tool()
 def ansible_console_power_on(hostlist: str) -> str:
     """High-risk maintenance tool requiring human approval gate.
     Brings up an unresponsive server via out-of-band management console / IPMI."""
-    return run_ansible_job_logic("Console Power On", {"hostlist": hostlist}, is_high_risk=True)
+    return run_ansible_job_logic("Console Power On", {"hostlist": hostlist, "hostname": hostlist}, is_high_risk=True)
+
+@mcp.tool()
+def ansible_get_maintenance_hosts(window_tag: str = "Linux_DEV", target_group: str = "all", wave: str = "wave1", force_window: bool = False) -> str:
+    """Discovers and filters servers eligible for patching based on maintenance window phase, 
+    schedule timing, and group attributes. Returns PCS clusters (HA/HANA) and standalone fleet hosts with CMDB metadata."""
+    payload = {
+        "window_tag": window_tag,
+        "target_group": target_group,
+        "wave": wave,
+        "force_window": "true" if force_window else "false",
+        "hostname": target_group,
+        "hostlist": target_group
+    }
+    return run_ansible_job_logic("Get Maintenance Window Hosts", payload)
 
 @mcp.tool()
 def ansible_run_command(command: str, hostname: str) -> str:
     """Executes a shell command on a remote host via Ansible AAP. 
     High-risk maintenance tool requiring human approval gate."""
-    return run_ansible_job_logic("Limited Run Any Command", {"hostlist": hostname, "command": command, "agent_comand": command}, is_high_risk=True)
+    return run_ansible_job_logic("Limited Run Any Command", {"hostlist": hostname, "hostname": hostname, "command": command, "agent_comand": command}, is_high_risk=True)
+
 
 if __name__ == "__main__":
     mcp.settings.host = "0.0.0.0"
