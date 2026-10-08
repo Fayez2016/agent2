@@ -23,19 +23,23 @@ This procedure applies to all RHEL 7, 8, and 9 servers.
 3. **Backup / Snapshot:** Take snapshots or backups of all critical nodes if applicable.
 
 ## 5. Phase 2: Execution - Non-HA Fleet Patching (`fleet_patcher`)
-*Note: Standalone nodes are patched in batches to minimize overall maintenance window duration.*
-1. **Apply Updates:** Run `ansible_patch_fleet` for the list of Non-HA nodes.
-2. **Reboot Evaluation:**
-   - If `planned_reboot: true`, OR
-   - If the patching task reports `need_to_restart: true` / `reboot_required: true`.
-   - If `need_to_restart: false`, SKIP reboot for that node and proceed to final summary.
-3. **Execute Reboot:** Run `ansible_reboot_host` or `ansible_reboot_fleet` for nodes requiring restart.
-4. **Health Check:** Run `ansible_check_host_online` to verify SSH port 22 connectivity and kernel uptime.
-5. **Strict SOP Completion Boundary:**
+*Note: Standalone nodes are patched in rolling waves (`serial: 200`) using unified execution parameters.*
+1. **Operational Parameters:** Accept `target_group` (AAP inventory group), `excluded_hosts` (hosts/clusters to skip), and `reboot_if_needed` (boolean).
+2. **Apply Updates & Conditional Reboot:**
+   - Execute OS updates via DNF.
+   - If `reboot_if_needed: true` AND host reports restart required (`need_to_restart: true` / `reboot_check.rc == 1`), trigger managed rolling reboot.
+   - If restart is not required, leave host online without bouncing.
+3. **Health Check:** Run `ansible_check_host_online` to verify SSH port 22 connectivity.
+4. **Strict SOP Completion Boundary:**
    - Once `ansible_check_host_online` returns `online: true`, the patching lifecycle for that host is **100% COMPLETE**.
    - **PROHIBITION:** The agent MUST NOT execute ad-hoc grubby, bootloader edits, `dnf remove`, or `dnf reinstall` commands.
    - Any minor kernel version or BLS entry discrepancy must be logged as an `INFO/WARNING` in the final summary report for human review, NOT modified via shell commands.
-6. **Final Summary:** Emit the structured execution summary report to conclude the session.
+5. **Bounded Triage Delegation (`rhel_diagnostician`):**
+   - If any host fails (YUM lock, storage full, transient mirror timeout, or soft reboot hang), delegate the failure map to `rhel_diagnostician`.
+   - **Circuit Breaker:** Enforce maximum 2 retry trials and maximum 1 out-of-band power cycle before escalating to an incident ticket.
+6. **Exception-Only Reporting:**
+   - Emit a 1-line operational tally (`Total Processed | Succeeded | Failed | Rebooted | Skipped Reboot`).
+   - Output individual host error tables ONLY for failed or remediated machines to prevent token bloat and gateway timeouts.
 
 ## 6. Phase 3: Execution - HA Rolling Update (`pcs_cluster_specialist`)
 *Note: Perform these steps for each HA node sequentially to maintain cluster quorum per Red Hat SOP 2059253.*
