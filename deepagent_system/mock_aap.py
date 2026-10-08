@@ -52,7 +52,8 @@ TEMPLATE_MAP = {
     "Check Host Online": 127,
     "Console Power On": 128,
     "HA Rolling Update": 129,
-    "Get Maintenance Window Hosts": 130
+    "Get Maintenance Window Hosts": 130,
+    "Unified Fleet Patch": 131
 }
 
 jobs = {}
@@ -192,6 +193,101 @@ def get_job_status(job_id):
         "extra_vars": json.dumps(job["extra_vars"])
     })
 
+@app.route('/api/v2/jobs/<int:job_id>/job_host_summaries/', methods=['GET'], strict_slashes=False)
+@app.route('/api/v2/jobs/<int:job_id>/job_host_summaries', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/jobs/<int:job_id>/job_host_summaries/', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/jobs/<int:job_id>/job_host_summaries', methods=['GET'], strict_slashes=False)
+def get_job_host_summaries(job_id):
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({"detail": "Not found."}), 404
+    
+    extra_vars = job.get("extra_vars", {})
+    raw_targets = extra_vars.get('hostlist') or extra_vars.get('hostname') or extra_vars.get('target_hosts') or extra_vars.get('limit') or ''
+    targets = extract_host_tokens(raw_targets)
+    if not targets:
+        # Default simulated fleet if limit was a generic group
+        targets = [f"rhel-srv{i:02d}.internal" for i in range(1, 11)]
+
+    results = []
+    for idx, t in enumerate(targets):
+        is_failed = ("err" in t.lower() or "fail" in t.lower() or "lock" in t.lower())
+        results.append({
+            "id": idx + 1,
+            "failed": is_failed,
+            "dark": False,
+            "ok": 3 if not is_failed else 1,
+            "changed": 2 if not is_failed else 0,
+            "summary_fields": {
+                "host": {"id": idx + 100, "name": t}
+            }
+        })
+
+    return jsonify({
+        "count": len(results),
+        "results": results
+    })
+
+@app.route('/api/v2/jobs/<int:job_id>/job_events/', methods=['GET'], strict_slashes=False)
+@app.route('/api/v2/jobs/<int:job_id>/job_events', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/jobs/<int:job_id>/job_events/', methods=['GET'], strict_slashes=False)
+@app.route('/api/controller/v2/jobs/<int:job_id>/job_events', methods=['GET'], strict_slashes=False)
+def get_job_events(job_id):
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({"detail": "Not found."}), 404
+
+    extra_vars = job.get("extra_vars", {})
+    raw_targets = extra_vars.get('hostlist') or extra_vars.get('hostname') or extra_vars.get('target_hosts') or extra_vars.get('limit') or ''
+    targets = extract_host_tokens(raw_targets)
+
+    results = []
+    for t in targets:
+        if "lock" in t.lower():
+            results.append({
+                "event": "runner_on_failed",
+                "failed": True,
+                "event_data": {
+                    "host": t,
+                    "task": "Stage 1: Apply OS Package Updates",
+                    "res": {
+                        "msg": "Failed to acquire DNF lock /var/run/yum.pid held by process PID 8122",
+                        "rc": 1
+                    }
+                }
+            })
+        elif "reboot" in t.lower() or "hang" in t.lower():
+            results.append({
+                "event": "runner_on_failed",
+                "failed": True,
+                "event_data": {
+                    "host": t,
+                    "task": "Stage 4: Post-Reboot SSH Verification",
+                    "res": {
+                        "msg": "Timed out waiting for connection on port 22",
+                        "rc": 1
+                    }
+                }
+            })
+        elif "err" in t.lower() or "fail" in t.lower():
+            results.append({
+                "event": "runner_on_failed",
+                "failed": True,
+                "event_data": {
+                    "host": t,
+                    "task": "Stage 1: Apply OS Package Updates",
+                    "res": {
+                        "msg": "Transaction test error: Conflicting package dependencies",
+                        "rc": 1
+                    }
+                }
+            })
+
+    return jsonify({
+        "count": len(results),
+        "results": results
+    })
+
 @app.route('/api/v2/jobs/<int:job_id>/stdout/', methods=['GET'], strict_slashes=False)
 @app.route('/api/v2/jobs/<int:job_id>/stdout', methods=['GET'], strict_slashes=False)
 @app.route('/api/controller/v2/jobs/<int:job_id>/stdout/', methods=['GET'], strict_slashes=False)
@@ -255,19 +351,42 @@ def get_job_stdout(job_id):
             lines.append(f"{t:30} : ok=2    changed=1    unreachable=0    failed=0")
         return "\n".join(lines)
 
-    # 3. Patch Fleet (Simulate Clean Updates vs DNF Transaction Failure)
-    if template_id == 110:
-        lines = [f"PLAY [Patch Fleet - DNF Package Updates ({len(targets)} Servers)] ****************"]
-        lines.append("TASK [Apply Security & Enhancement Packages via DNF] ***************************")
+    # 3. Patch Fleet / Unified Fleet Patch (Simulate Clean Updates vs Failures)
+    if template_id in [110, 131]:
+        lines = [f"PLAY [Enterprise Linux Fleet Patching Workflow ({len(targets)} Servers)] ****************"]
+        lines.append("TASK [Stage 1: Apply OS Package Updates] **************************************")
         for t in targets:
-            if "dnf-err" in t.lower() or "pkg-fail" in t.lower():
-                lines.append(f"failed: [{t}] => {{ \"stage\": \"Patching\", \"error\": \"DNF Transaction Error: GPG key verification failed or package dependency conflict.\", \"reboot_required\": false }}")
+            if "lock" in t.lower():
+                lines.append(f"failed: [{t}] => {{ \"stage\": \"Patching\", \"error\": \"Failed to acquire DNF lock /var/run/yum.pid held by process PID 8122\" }}")
+            elif "err" in t.lower() or "fail" in t.lower():
+                lines.append(f"failed: [{t}] => {{ \"stage\": \"Patching\", \"error\": \"DNF Transaction Error: GPG key verification failed or package dependency conflict.\" }}")
             else:
                 pkgs = random.randint(12, 28)
-                lines.append(f"changed: [{t}] => {{ \"packages_updated\": {pkgs}, \"reboot_required\": true, \"status\": \"applied\" }}")
+                lines.append(f"changed: [{t}] => {{ \"packages_updated\": {pkgs}, \"status\": \"applied\" }}")
+        
+        lines.append("\nTASK [Stage 2: Check If Reboot Required] *************************************")
+        for t in targets:
+            rc = 1 if ("reboot" in t.lower() or "hang" in t.lower() or not ("norbt" in t.lower())) else 0
+            lines.append(f"ok: [{t}] => {{ \"rc\": {rc}, \"reboot_required\": {str(rc == 1).lower()} }}")
+
+        lines.append("\nTASK [Stage 3: Rolling Reboot When Required] *********************************")
+        for t in targets:
+            if "hang" in t.lower():
+                lines.append(f"fatal: [{t}] => {{ \"msg\": \"Reboot command timed out after 600s\" }}")
+            else:
+                lines.append(f"changed: [{t}] => {{ \"msg\": \"Reboot completed successfully\" }}")
+
+        lines.append("\nTASK [Stage 4: Post-Reboot SSH Verification] **********************************")
+        for t in targets:
+            if "hang" in t.lower():
+                lines.append(f"fatal: [{t}] => {{ \"msg\": \"Timed out waiting for connection on port 22\" }}")
+            else:
+                lines.append(f"ok: [{t}] => {{ \"port\": 22, \"state\": \"started\" }}")
+
         lines.append("\nPLAY RECAP *********************************************************************")
         for t in targets:
-            lines.append(f"{t:30} : ok=3    changed=1    unreachable=0    failed=0")
+            has_fail = ("err" in t.lower() or "fail" in t.lower() or "lock" in t.lower() or "hang" in t.lower())
+            lines.append(f"{t:30} : ok=4    changed=2    unreachable=0    failed={1 if has_fail else 0}")
         return "\n".join(lines)
 
     # 4. Managed Reboot

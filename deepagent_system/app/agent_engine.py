@@ -38,7 +38,7 @@ def get_llm_instance(provider: Optional[str] = None, model_name: Optional[str] =
             model=eff_model,
             temperature=temperature,
             max_retries=5,
-            timeout=60,
+            timeout=300,
         )
     elif eff_provider == "groq":
         api_key = HitlRepository.get_setting("groq_api_key", settings.groq_api_key)
@@ -50,7 +50,7 @@ def get_llm_instance(provider: Optional[str] = None, model_name: Optional[str] =
             model=eff_model,
             temperature=temperature,
             max_retries=5,
-            timeout=60,
+            timeout=300,
         )
     elif eff_provider in ("custom_openai", "openai"):
         import httpx
@@ -66,7 +66,7 @@ def get_llm_instance(provider: Optional[str] = None, model_name: Optional[str] =
             model=eff_model,
             temperature=temperature,
             max_retries=3,
-            timeout=60,
+            timeout=300,
             http_client=httpx.Client(verify=verify_arg),
             http_async_client=httpx.AsyncClient(verify=verify_arg),
         )

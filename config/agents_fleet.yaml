@@ -36,6 +36,8 @@ subagents:
     display_name: "Enterprise Fleet Patching Specialist"
     description: "Specialized subagent for enterprise fleet package updates, DNF security patching, managed reboots, and post-reboot verification."
     tools:
+      - ansible_launch_fleet_patch
+      - ansible_evaluate_job_run
       - ansible_get_maintenance_hosts
       - ansible_patch_fleet
       - ansible_reboot_fleet
@@ -106,6 +108,8 @@ subagents:
     display_name: "RHEL Diagnostic and Recovery Specialist"
     description: "Specialized subagent for host telemetry, log inspection (journalctl), storage expansion (/var), out-of-band IPMI recovery, and ad-hoc troubleshooting commands."
     tools:
+      - ansible_retry_patching_host
+      - ansible_escalate_to_incident_ticket
       - ansible_get_server_info
       - ansible_check_host_online
       - ansible_run_command
